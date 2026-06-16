@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+
+# Environment files (sensitive!)
+.env
+frontend/.env
+backend/.env
+
+# Build outputs
+dist/
+.tanstack/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS
+.DS_Store
+
+# Logs
+*.log
