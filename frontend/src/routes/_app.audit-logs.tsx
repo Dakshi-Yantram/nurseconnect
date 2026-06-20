@@ -1,8 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useRouter } from "@tanstack/react-router";  // ← useRouter add karo
 import { Card } from "@/components/shared/Card";
 import { StatusChip } from "@/components/shared/StatusChip";
 import { AUDIT_LOGS } from "@/lib/mock-data";
-import { Download } from "lucide-react";
+import { Download, ArrowLeft } from "lucide-react";  // ← ArrowLeft add karo
 
 export const Route = createFileRoute("/_app/audit-logs")({ component: AuditPage });
 
@@ -21,8 +21,15 @@ function exportCSV() {
 }
 
 function AuditPage() {
+  const router = useRouter();
   return (
     <div className="space-y-6">
+      <button
+        onClick={() => router.history.back()}
+        className="inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"
+      >
+        <ArrowLeft className="h-4 w-4" /> Back
+      </button>
       <Card
         title="Immutable Audit Trail"
         action={

@@ -1,8 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { Card } from "@/components/shared/Card";
 import { StatusChip } from "@/components/shared/StatusChip";
 import { RULE_SETS } from "@/lib/mock-data";
-import { Edit2, History, BookOpen, AlertTriangle, ShieldCheck, Activity } from "lucide-react";
+import { Edit2, History, BookOpen, AlertTriangle, ShieldCheck, Activity, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/clinical-rule-sets")({ component: RuleSetsPage });
@@ -17,8 +17,13 @@ const VITAL_THRESHOLDS = [
 ];
 
 function RuleSetsPage() {
+  const router = useRouter();
   return (
     <div className="space-y-6">
+      <button onClick={() => router.history.back()} className="inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground">
+        <ArrowLeft className="h-4 w-4" /> Back
+      </button>
+
       <Card title="Rule Sets" padded={false}>
         <table className="w-full text-[13px]">
           <thead><tr className="bg-muted/40 text-muted-foreground text-left">

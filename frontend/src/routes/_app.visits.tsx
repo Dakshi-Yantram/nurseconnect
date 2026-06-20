@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Outlet, useMatchRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { StatusChip } from "@/components/shared/StatusChip";
@@ -6,7 +6,7 @@ import { Star, Eye } from "lucide-react";
 import { VISITS, type Visit } from "@/lib/mock-data";
 import { getNewVisits } from "@/lib/visit-store";
 
-export const Route = createFileRoute("/_app/visits")({ component: VisitsPage });
+export const Route = createFileRoute("/_app/visits")({ component: VisitsLayout });
 
 const statusTone = (s: Visit["status"]) => {
     if (s === "Completed") return "success" as const;
@@ -14,6 +14,15 @@ const statusTone = (s: Visit["status"]) => {
     if (s === "In Progress") return "primary" as const;
     return "muted" as const;
 };
+
+// Layout component — shows list OR child route (detail page)
+function VisitsLayout() {
+    const matchRoute = useMatchRoute();
+    const isDetail = matchRoute({ to: "/visits/$visitId", fuzzy: true });
+
+    if (isDetail) return <Outlet />;
+    return <VisitsPage />;
+}
 
 function VisitsPage() {
     const nav = useNavigate();
@@ -40,7 +49,10 @@ function VisitsPage() {
         { key: "status", header: "Status", cell: r => <StatusChip tone={statusTone(r.status)} label={r.status} dot /> },
         {
             key: "actions", header: "", cell: r => (
-                <button onClick={e => { e.stopPropagation(); nav({ to: "/visits/$visitId", params: { visitId: r.id } }); }} className="h-8 w-8 grid place-items-center rounded hover:bg-secondary">
+                <button
+                    onClick={e => { e.stopPropagation(); nav({ to: "/visits/$visitId", params: { visitId: r.id } }); }}
+                    className="h-8 w-8 grid place-items-center rounded hover:bg-secondary"
+                >
                     <Eye className="h-4 w-4 text-muted-foreground" />
                 </button>
             )

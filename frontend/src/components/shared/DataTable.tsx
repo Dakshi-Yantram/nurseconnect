@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { Search, Download, Filter, Plus, X } from "lucide-react";
+import { Search, Download, Filter, Plus, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { type ReactNode, useState, useRef, useEffect } from "react";
 
 export type Column<T> = {
@@ -25,7 +25,6 @@ function exportToCSV<T extends { id: string }>(rows: T[], columns: Column<T>[]) 
     columns
       .filter(c => c.key !== "actions")
       .map(c => {
-        // Read directly from row data by key
         const val = (row as Record<string, unknown>)[c.key];
         const text = val != null && (typeof val === "string" || typeof val === "number")
           ? String(val)
@@ -43,9 +42,13 @@ function exportToCSV<T extends { id: string }>(rows: T[], columns: Column<T>[]) 
   a.click();
   URL.revokeObjectURL(url);
 }
+
+const PAGE_SIZE = 10;
+
 export function DataTable<T extends { id: string }>({
   columns, rows, onRowClick, search = true, onSearch, onAdd, addLabel,
   filters, filterOptions, allRows,
+  pageSize = PAGE_SIZE,
 }: {
   columns: Column<T>[]; rows: T[]; onRowClick?: (row: T) => void;
   search?: boolean; onSearch?: (v: string) => void;
@@ -53,10 +56,15 @@ export function DataTable<T extends { id: string }>({
   filters?: ReactNode;
   filterOptions?: FilterOption[];
   allRows?: T[];
+  pageSize?: number;
 }) {
   const [showFilters, setShowFilters] = useState(false);
   const [activeFilters, setActiveFilters] = useState<Record<string, string>>({});
+  const [page, setPage] = useState(1);
   const filterRef = useRef<HTMLDivElement>(null);
+
+  // Reset to page 1 when rows change (search/filter)
+  useEffect(() => { setPage(1); }, [rows.length]);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -68,10 +76,31 @@ export function DataTable<T extends { id: string }>({
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
+  // Apply active filters on top of already-searched rows
+  const filteredRows = rows.filter(row =>
+    Object.entries(activeFilters).every(([k, v]) =>
+      !v || String((row as Record<string, unknown>)[k] ?? "") === v
+    )
+  );
+
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const pagedRows = filteredRows.slice((safePage - 1) * pageSize, safePage * pageSize);
+
   const activeFilterCount = Object.values(activeFilters).filter(Boolean).length;
+
+  // Page number buttons — show up to 5 around current page
+  const pageNumbers = (() => {
+    const pages: number[] = [];
+    const start = Math.max(1, safePage - 2);
+    const end = Math.min(totalPages, start + 4);
+    for (let i = start; i <= end; i++) pages.push(i);
+    return pages;
+  })();
 
   return (
     <div className="nc-card">
+      {/* Toolbar */}
       <div className="flex flex-wrap gap-3 items-center justify-between p-4 border-b border-border">
         <div className="flex items-center gap-2 flex-1">
           {search && (
@@ -87,7 +116,7 @@ export function DataTable<T extends { id: string }>({
           {filters}
         </div>
         <div className="flex items-center gap-2">
-          {/* Filters */}
+          {/* Filters dropdown */}
           <div className="relative" ref={filterRef}>
             <button
               onClick={() => setShowFilters(v => !v)}
@@ -122,7 +151,10 @@ export function DataTable<T extends { id: string }>({
                       <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">{f.label}</label>
                       <select
                         value={activeFilters[f.key] ?? ""}
-                        onChange={e => setActiveFilters(prev => ({ ...prev, [f.key]: e.target.value }))}
+                        onChange={e => {
+                          setActiveFilters(prev => ({ ...prev, [f.key]: e.target.value }));
+                          setPage(1);
+                        }}
                         className="mt-1 w-full px-2 py-1.5 text-[12px] rounded-md border border-border bg-card focus:outline-none"
                       >
                         <option value="">All</option>
@@ -159,12 +191,15 @@ export function DataTable<T extends { id: string }>({
           {Object.entries(activeFilters).filter(([, v]) => v).map(([k, v]) => (
             <span key={k} className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 text-primary text-[11px] font-medium">
               {k}: {v}
-              <button onClick={() => setActiveFilters(prev => ({ ...prev, [k]: "" }))}><X className="h-3 w-3" /></button>
+              <button onClick={() => { setActiveFilters(prev => ({ ...prev, [k]: "" })); setPage(1); }}>
+                <X className="h-3 w-3" />
+              </button>
             </span>
           ))}
         </div>
       )}
 
+      {/* Table */}
       <div className="overflow-x-auto nc-scroll">
         <table className="w-full text-[13px]">
           <thead>
@@ -175,7 +210,7 @@ export function DataTable<T extends { id: string }>({
             </tr>
           </thead>
           <tbody>
-            {rows.map(row => (
+            {pagedRows.map(row => (
               <tr
                 key={row.id}
                 onClick={() => onRowClick?.(row)}
@@ -186,20 +221,59 @@ export function DataTable<T extends { id: string }>({
                 ))}
               </tr>
             ))}
-            {rows.length === 0 && (
-              <tr><td colSpan={columns.length} className="px-4 py-12 text-center text-muted-foreground text-[13px]">No records found</td></tr>
+            {pagedRows.length === 0 && (
+              <tr>
+                <td colSpan={columns.length} className="px-4 py-12 text-center text-muted-foreground text-[13px]">
+                  No records found
+                </td>
+              </tr>
             )}
           </tbody>
         </table>
       </div>
 
+      {/* Pagination */}
       <div className="flex items-center justify-between px-4 py-3 border-t border-border text-[12px] text-muted-foreground">
-        <div>Showing <span className="font-medium text-foreground">{rows.length}</span> of {rows.length}</div>
+        <div>
+          Showing{" "}
+          <span className="font-medium text-foreground">
+            {filteredRows.length === 0 ? 0 : (safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, filteredRows.length)}
+          </span>
+          {" "}of{" "}
+          <span className="font-medium text-foreground">{filteredRows.length}</span>
+        </div>
+
         <div className="flex items-center gap-1">
-          <button className="px-2.5 py-1.5 rounded border border-border hover:bg-secondary">Prev</button>
-          <button className="px-2.5 py-1.5 rounded border border-border bg-primary text-white">1</button>
-          <button className="px-2.5 py-1.5 rounded border border-border hover:bg-secondary">2</button>
-          <button className="px-2.5 py-1.5 rounded border border-border hover:bg-secondary">Next</button>
+          <button
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={safePage === 1}
+            className="p-1.5 rounded border border-border hover:bg-secondary disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+          </button>
+
+          {pageNumbers.map(n => (
+            <button
+              key={n}
+              onClick={() => setPage(n)}
+              className={cn(
+                "min-w-[28px] px-2 py-1 rounded border text-[12px]",
+                n === safePage
+                  ? "border-primary bg-primary text-white font-medium"
+                  : "border-border hover:bg-secondary"
+              )}
+            >
+              {n}
+            </button>
+          ))}
+
+          <button
+            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            disabled={safePage === totalPages}
+            className="p-1.5 rounded border border-border hover:bg-secondary disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <ChevronRight className="h-3.5 w-3.5" />
+          </button>
         </div>
       </div>
     </div>

@@ -89,7 +89,7 @@ function DashboardPage() {
           </div>
         </Card>
 
-        <Card title="Service Distribution" action={<a className="text-primary font-medium">View Details</a>}>
+        <Card title="Service Distribution" action={<Link to="/visits" className="text-primary font-medium">View Details</Link>}>
           <div className="h-[200px]">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>

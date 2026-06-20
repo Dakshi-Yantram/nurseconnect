@@ -72,6 +72,7 @@ import { Route as AppComplaintsComplaintIdRouteImport } from './routes/_app.comp
 import { Route as AppClinicalRuleSetsRuleIdRouteImport } from './routes/_app.clinical-rule-sets.$ruleId'
 import { Route as AppClinicalEscalationCaseIdRouteImport } from './routes/_app.clinical-escalation.$caseId'
 import { Route as AppCarePackagesPackageIdRouteImport } from './routes/_app.care-packages.$packageId'
+import { Route as AppBookingsBookingIdRouteImport } from './routes/_app.bookings.$bookingId'
 import { Route as AppWorkerVisitsIndexRouteImport } from './routes/_app.worker.visits.index'
 import { Route as AppPartnerVisitsIndexRouteImport } from './routes/_app.partner.visits.index'
 import { Route as AppWorkerVisitsVisitIdRouteImport } from './routes/_app.worker.visits.$visitId'
@@ -407,6 +408,11 @@ const AppCarePackagesPackageIdRoute =
     path: '/$packageId',
     getParentRoute: () => AppCarePackagesRoute,
   } as any)
+const AppBookingsBookingIdRoute = AppBookingsBookingIdRouteImport.update({
+  id: '/bookings/$bookingId',
+  path: '/bookings/$bookingId',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppWorkerVisitsIndexRoute = AppWorkerVisitsIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -490,6 +496,7 @@ export interface FileRoutesByFullPath {
   '/visits': typeof AppVisitsRouteWithChildren
   '/worker': typeof AppWorkerRouteWithChildren
   '/auth/login': typeof AuthLoginRoute
+  '/bookings/$bookingId': typeof AppBookingsBookingIdRoute
   '/care-packages/$packageId': typeof AppCarePackagesPackageIdRoute
   '/clinical-escalation/$caseId': typeof AppClinicalEscalationCaseIdRoute
   '/clinical-rule-sets/$ruleId': typeof AppClinicalRuleSetsRuleIdRoute
@@ -561,6 +568,7 @@ export interface FileRoutesByTo {
   '/system-index': typeof AppSystemIndexRoute
   '/visits': typeof AppVisitsRouteWithChildren
   '/auth/login': typeof AuthLoginRoute
+  '/bookings/$bookingId': typeof AppBookingsBookingIdRoute
   '/care-packages/$packageId': typeof AppCarePackagesPackageIdRoute
   '/clinical-escalation/$caseId': typeof AppClinicalEscalationCaseIdRoute
   '/clinical-rule-sets/$ruleId': typeof AppClinicalRuleSetsRuleIdRoute
@@ -635,6 +643,7 @@ export interface FileRoutesById {
   '/_app/visits': typeof AppVisitsRouteWithChildren
   '/_app/worker': typeof AppWorkerRouteWithChildren
   '/auth/login': typeof AuthLoginRoute
+  '/_app/bookings/$bookingId': typeof AppBookingsBookingIdRoute
   '/_app/care-packages/$packageId': typeof AppCarePackagesPackageIdRoute
   '/_app/clinical-escalation/$caseId': typeof AppClinicalEscalationCaseIdRoute
   '/_app/clinical-rule-sets/$ruleId': typeof AppClinicalRuleSetsRuleIdRoute
@@ -711,6 +720,7 @@ export interface FileRouteTypes {
     | '/visits'
     | '/worker'
     | '/auth/login'
+    | '/bookings/$bookingId'
     | '/care-packages/$packageId'
     | '/clinical-escalation/$caseId'
     | '/clinical-rule-sets/$ruleId'
@@ -782,6 +792,7 @@ export interface FileRouteTypes {
     | '/system-index'
     | '/visits'
     | '/auth/login'
+    | '/bookings/$bookingId'
     | '/care-packages/$packageId'
     | '/clinical-escalation/$caseId'
     | '/clinical-rule-sets/$ruleId'
@@ -855,6 +866,7 @@ export interface FileRouteTypes {
     | '/_app/visits'
     | '/_app/worker'
     | '/auth/login'
+    | '/_app/bookings/$bookingId'
     | '/_app/care-packages/$packageId'
     | '/_app/clinical-escalation/$caseId'
     | '/_app/clinical-rule-sets/$ruleId'
@@ -1352,6 +1364,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppCarePackagesPackageIdRouteImport
       parentRoute: typeof AppCarePackagesRoute
     }
+    '/_app/bookings/$bookingId': {
+      id: '/_app/bookings/$bookingId'
+      path: '/bookings/$bookingId'
+      fullPath: '/bookings/$bookingId'
+      preLoaderRoute: typeof AppBookingsBookingIdRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/worker/visits/': {
       id: '/_app/worker/visits/'
       path: '/'
@@ -1721,6 +1740,7 @@ interface AppRouteChildren {
   AppSystemIndexRoute: typeof AppSystemIndexRoute
   AppVisitsRoute: typeof AppVisitsRouteWithChildren
   AppWorkerRoute: typeof AppWorkerRouteWithChildren
+  AppBookingsBookingIdRoute: typeof AppBookingsBookingIdRoute
   AppNursesNurseIdRoute: typeof AppNursesNurseIdRoute
   AppPatientsPatientIdRoute: typeof AppPatientsPatientIdRoute
   AppUsersNursesRoute: typeof AppUsersNursesRoute
@@ -1752,6 +1772,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppSystemIndexRoute: AppSystemIndexRoute,
   AppVisitsRoute: AppVisitsRouteWithChildren,
   AppWorkerRoute: AppWorkerRouteWithChildren,
+  AppBookingsBookingIdRoute: AppBookingsBookingIdRoute,
   AppNursesNurseIdRoute: AppNursesNurseIdRoute,
   AppPatientsPatientIdRoute: AppPatientsPatientIdRoute,
   AppUsersNursesRoute: AppUsersNursesRoute,

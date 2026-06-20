@@ -4,6 +4,7 @@ import { StatusChip } from "@/components/shared/StatusChip";
 import { Timeline } from "@/components/shared/Timeline";
 import { ArrowLeft, Calendar, Clock, Timer, MapPin, Star, User, Stethoscope } from "lucide-react";
 import { VISITS } from "@/lib/mock-data";
+import { getNewVisits } from "@/lib/visit-store";
 
 export const Route = createFileRoute("/_app/visits/$visitId")({ component: VisitDetailPage });
 
@@ -31,7 +32,8 @@ function DetailRow({ icon, label, value }: { icon: React.ReactNode; label: strin
 function VisitDetailPage() {
   const router = useRouter();
   const { visitId } = useParams({ from: "/_app/visits/$visitId" });
-  const v = VISITS.find(x => x.id === visitId);
+  const allVisits = [...getNewVisits(), ...VISITS];
+  const v = allVisits.find(x => x.id === visitId);
 
   if (!v) {
     return (

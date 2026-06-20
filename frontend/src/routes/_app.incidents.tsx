@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { Card } from "@/components/shared/Card";
 import { StatusChip } from "@/components/shared/StatusChip";
@@ -10,6 +10,7 @@ import { WorkflowModal, FormField, inputCls, textareaCls } from "@/components/sh
 import { OperationalTimeline } from "@/components/shared/OperationalTimeline";
 import { useEntities, useEntity, useOrchestration, useTransition } from "@/lib/orchestration";
 import { useAuth } from "@/lib/auth-context";
+import { ArrowLeft } from "lucide-react";
 
 export const Route = createFileRoute("/_app/incidents")({ component: IncidentsPage });
 
@@ -19,6 +20,7 @@ type ModalType = "comment" | "escalate" | "resolve" | null;
 
 function IncidentsPage() {
   const nav = useNavigate();
+  const router = useRouter();
   const { user } = useAuth();
   const all = useEntities("incident");
   const [tab, setTab] = useState<Tab>("Open");
@@ -42,6 +44,13 @@ function IncidentsPage() {
 
   return (
     <div className="space-y-6">
+      <button
+        onClick={() => router.history.back()}
+        className="inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground"
+      >
+        <ArrowLeft className="h-4 w-4" /> Back
+      </button>
+
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Stat label="Open" value={all.filter(i => bindStatus("incident", i.state) === "open").length} tone="danger" />
         <Stat label="In Progress" value={all.filter(i => bindStatus("incident", i.state) === "investigating").length} tone="warning" />

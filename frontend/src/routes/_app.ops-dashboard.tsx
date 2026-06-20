@@ -273,26 +273,21 @@ function linkFor(it: QueueItem): string | undefined {
   if (it.workflow === "incident")   return `/incidents/${it.id}`;
   if (it.workflow === "complaint")  return `/complaints/${it.id}`;
   if (it.workflow === "dispute")    return `/disputes/${it.id}`;
+  if (it.workflow === "booking")    return `/bookings/${it.id}`;
   return undefined;
 }
 
 function PriorityRow({ item }: { item: QueueItem }) {
   const href = linkFor(item);
-  return (
-    <li className="flex items-center gap-3 px-4 py-2.5 border-b border-border last:border-0">
+  const content = (
+    <>
       <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-wide ${PRIORITY_TONE[item.priority]}`}>
         {item.priority}
       </span>
       <div className="min-w-0 flex-1">
-        {href ? (
-          <Link to={href} className="text-[13px] font-medium truncate hover:text-primary block">
-            #{item.id} · {itemLabel(item)}
-          </Link>
-        ) : (
-          <div className="text-[13px] font-medium truncate">
-            #{item.id} · {itemLabel(item)}
-          </div>
-        )}
+        <div className="text-[13px] font-medium truncate">
+          #{item.id} · {itemLabel(item)}
+        </div>
         <div className="text-[11.5px] text-muted-foreground truncate">
           {item.workflow} · {itemSubLabel(item)}
         </div>
@@ -303,6 +298,16 @@ function PriorityRow({ item }: { item: QueueItem }) {
           enteredAt={parseEnteredAt(item.enteredAt)} />
         {href && <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />}
       </div>
+    </>
+  );
+
+  return href ? (
+    <Link to={href} className="flex items-center gap-3 px-4 py-2.5 border-b border-border last:border-0 hover:bg-muted/30">
+      {content}
+    </Link>
+  ) : (
+    <li className="flex items-center gap-3 px-4 py-2.5 border-b border-border last:border-0">
+      {content}
     </li>
   );
 }
