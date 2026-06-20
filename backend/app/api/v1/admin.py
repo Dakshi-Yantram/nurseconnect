@@ -20,9 +20,11 @@ from app.models.models import (
     ConsumerProfile,
     Escalation,
     FinancialLedger,
+    Patient, 
     User,
     WorkerProfile,
 )
+from app.schemas.schemas import PatientCreate, PatientOut 
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -147,3 +149,65 @@ async def rematch_booking(
     b.rematch_count += 1
     await db.commit()
     return {"rematch_initiated": True, "attempt": b.rematch_count}
+# ----- Admin: Patients (cross-consumer visibility) -----
+@router.get("/patients", response_model=List[PatientOut])
+async def admin_list_patients(
+    current: CurrentUser = Depends(require_roles(
+        UserRole.admin_ops, UserRole.admin_clinical, UserRole.admin_super
+    )),
+    db: AsyncSession = Depends(get_db),
+):
+    res = await db.execute(select(Patient).order_by(Patient.created_at.desc()))
+    return [PatientOut.model_validate(p) for p in res.scalars().all()]
+
+
+class AdminPatientCreate(PatientCreate):
+    consumer_id: UUID
+
+
+@router.post("/patients", response_model=PatientOut)
+async def admin_create_patient(
+    payload: AdminPatientCreate,
+    current: CurrentUser = Depends(require_roles(
+        UserRole.admin_ops, UserRole.admin_clinical, UserRole.admin_super
+    )),
+    db: AsyncSession = Depends(get_db),
+):
+    res = await db.execute(select(ConsumerProfile).where(ConsumerProfile.id == payload.consumer_id))
+    profile = res.scalar_one_or_none()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Consumer not found")
+
+    data = payload.model_dump(exclude={"consumer_id"})
+    patient = Patient(consumer_id=profile.id, **data)
+    db.add(patient)
+    await db.commit()
+    await db.refresh(patient)
+    return PatientOut.model_validate(patient)
+@router.get("/consumers")
+async def admin_list_consumers(
+    current: CurrentUser = Depends(require_roles(
+        UserRole.admin_ops, UserRole.admin_clinical, UserRole.admin_super
+    )),
+    db: AsyncSession = Depends(get_db),
+):
+    res = await db.execute(
+        select(ConsumerProfile, User).join(User, User.id == ConsumerProfile.user_id)
+    )
+    return [
+        {"id": str(cp.id), "full_name": u.full_name, "phone": u.phone_e164}
+        for cp, u in res.all()
+    ]
+@router.get("/patients/{patient_id}", response_model=PatientOut)
+async def admin_get_patient(
+    patient_id: UUID,
+    current: CurrentUser = Depends(require_roles(
+        UserRole.admin_ops, UserRole.admin_clinical, UserRole.admin_super
+    )),
+    db: AsyncSession = Depends(get_db),
+):
+    res = await db.execute(select(Patient).where(Patient.id == patient_id))
+    p = res.scalar_one_or_none()
+    if not p:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    return PatientOut.model_validate(p)
