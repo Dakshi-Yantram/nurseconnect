@@ -1,5 +1,6 @@
-"""Auth endpoints: OTP send/verify, register, refresh, me."""
+"""Auth endpoints: email signup/login, refresh, me."""
 import logging
+import re
 import secrets
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
@@ -18,19 +19,27 @@ from app.core.security import (
     hash_password,
     verify_password,
 )
-from app.integrations import msg91_client
 from app.models.enums import UserRole, UserStatus
-from app.models.models import ConsumerProfile, OtpCode, User, UserSession, WorkerProfile
+from app.models.models import (
+    ConsumerProfile,
+    EmailVerificationCode,
+    User,
+    UserSession,
+    WorkerProfile,
+)
 from app.schemas.schemas import (
     AuthResponse,
-    OtpSendRequest,
-    OtpSendResponse,
-    OtpVerifyRequest,
+    PasswordLoginRequest,
     RefreshRequest,
+    RegisterRequest,
+    RegisterResponse,
+    ResendEmailVerificationRequest,
     TokenPair,
     UserOut,
+    VerifyEmailRequest,
 )
 from app.services.common_services import audit
+from app.services.email_service import send_verification_email
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -47,6 +56,83 @@ def _normalize_phone(phone: str) -> str:
     return p
 
 
+def _normalize_email(email: str) -> str:
+    return email.strip().lower()
+
+
+def _validate_signup_role(role: UserRole) -> None:
+    if role not in (UserRole.consumer, UserRole.worker):
+        raise HTTPException(status_code=400, detail="Only consumer and worker accounts can self-register")
+
+
+def _validate_password(password: str) -> None:
+    if (
+        len(password) < 8
+        or len(password.encode("utf-8")) > 72
+        or not re.search(r"[A-Z]", password)
+        or not re.search(r"[a-z]", password)
+        or not re.search(r"\d", password)
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Password must be 8-72 bytes and include uppercase, lowercase, and a number",
+        )
+
+
+async def _ensure_role_profile(db: AsyncSession, user: User) -> None:
+    if user.role == UserRole.consumer:
+        res = await db.execute(select(ConsumerProfile).where(ConsumerProfile.user_id == user.id))
+        if not res.scalar_one_or_none():
+            db.add(ConsumerProfile(user_id=user.id))
+    elif user.role == UserRole.worker:
+        res = await db.execute(select(WorkerProfile).where(WorkerProfile.user_id == user.id))
+        if not res.scalar_one_or_none():
+            db.add(WorkerProfile(user_id=user.id))
+    await db.flush()
+
+
+async def _create_email_verification(db: AsyncSession, user: User) -> str:
+    code = (
+        settings.EMAIL_DEV_FIXED_CODE
+        if settings.EMAIL_DEV_MODE
+        else f"{secrets.randbelow(1000000):06d}"
+    )
+    expires_at = datetime.now(timezone.utc) + timedelta(
+        minutes=settings.EMAIL_VERIFICATION_EXPIRE_MINUTES
+    )
+    db.add(
+        EmailVerificationCode(
+            user_id=user.id,
+            email=user.email,
+            code_hash=hash_password(code),
+            expires_at=expires_at,
+        )
+    )
+    await db.flush()
+    return code
+
+
+async def _persist_session(
+    db: AsyncSession,
+    user: User,
+    tokens: TokenPair,
+    device_id: str | None = None,
+    device_platform: str | None = None,
+    fcm_token: str | None = None,
+) -> None:
+    refresh_payload = decode_token(tokens.refresh_token)
+    db.add(
+        UserSession(
+            user_id=user.id,
+            refresh_token_jti=refresh_payload["jti"],
+            device_id=device_id,
+            device_platform=device_platform,
+            fcm_token=fcm_token,
+            expires_at=datetime.fromtimestamp(refresh_payload["exp"], tz=timezone.utc),
+        )
+    )
+
+
 def _issue_token_pair(user: User, claims_extra: dict | None = None) -> TokenPair:
     extras = {"role": user.role.value}
     if claims_extra:
@@ -60,137 +146,140 @@ def _issue_token_pair(user: User, claims_extra: dict | None = None) -> TokenPair
     )
 
 
-@router.post("/send-otp", response_model=OtpSendResponse)
-async def send_otp(payload: OtpSendRequest, db: AsyncSession = Depends(get_db)):
+@router.post("/register", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
+async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db)):
+    """Create a pending account and send a code to the supplied email."""
+    _validate_signup_role(payload.role)
+    _validate_password(payload.password)
+    email = _normalize_email(str(payload.email))
     phone = _normalize_phone(payload.phone_e164)
-    code = settings.OTP_DEV_FIXED_CODE if settings.OTP_DEV_MODE else f"{secrets.randbelow(1000000):06d}"
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.OTP_EXPIRE_MINUTES)
 
-    otp = OtpCode(
-        phone_e164=phone,
-        code_hash=hash_password(code),
-        purpose=payload.purpose,
-        expires_at=expires_at,
-    )
-    db.add(otp)
-    await db.commit()
+    email_res = await db.execute(select(User).where(User.email == email))
+    existing_email = email_res.scalar_one_or_none()
+    if existing_email and existing_email.status == UserStatus.active:
+        raise HTTPException(status_code=409, detail="An account with this email already exists")
 
-    # Dispatch via provider abstraction (mock in dev)
-    await msg91_client.send_otp(phone, code)
+    phone_res = await db.execute(select(User).where(User.phone_e164 == phone))
+    existing_phone = phone_res.scalar_one_or_none()
+    if existing_phone and existing_phone is not existing_email:
+        raise HTTPException(status_code=409, detail="An account with this phone number already exists")
 
-    return OtpSendResponse(
-        sent=True,
-        phone_e164=phone,
-        expires_in_seconds=settings.OTP_EXPIRE_MINUTES * 60,
-        dev_otp=code if settings.OTP_DEV_MODE else None,
-    )
-
-
-@router.post("/verify-otp", response_model=AuthResponse)
-async def verify_otp(payload: OtpVerifyRequest, db: AsyncSession = Depends(get_db)):
-    phone = _normalize_phone(payload.phone_e164)
-    res = await db.execute(
-        select(OtpCode)
-        .where(OtpCode.phone_e164 == phone, OtpCode.consumed.is_(False))
-        .order_by(OtpCode.created_at.desc())
-        .limit(1)
-    )
-    otp = res.scalar_one_or_none()
-    if not otp:
-        raise HTTPException(status_code=400, detail="No active OTP. Please request a new one.")
-    if otp.expires_at < datetime.now(timezone.utc):
-        raise HTTPException(status_code=400, detail="OTP expired")
-    if otp.attempts >= 5:
-        raise HTTPException(status_code=429, detail="Too many attempts. Request a new OTP.")
-
-    otp.attempts += 1
-    if not verify_password(payload.code, otp.code_hash):
-        await db.commit()
-        raise HTTPException(status_code=400, detail="Invalid OTP")
-
-    otp.consumed = True
-
-    # Get or create user
-    ures = await db.execute(select(User).where(User.phone_e164 == phone))
-    user = ures.scalar_one_or_none()
-    is_new = False
+    user = existing_email
     if not user:
-        is_new = True
         user = User(
             phone_e164=phone,
+            email=email,
+            full_name=payload.full_name.strip(),
             role=payload.role,
-            status=UserStatus.active,
+            status=UserStatus.pending_verification,
+            password_hash=hash_password(payload.password),
         )
         db.add(user)
         await db.flush()
-
-        if payload.role == UserRole.consumer:
-            db.add(ConsumerProfile(user_id=user.id))
-        elif payload.role == UserRole.worker:
-            db.add(WorkerProfile(user_id=user.id))
-        await db.flush()
     else:
-        if user.status == UserStatus.pending_verification:
-            user.status = UserStatus.active
-        user.last_login_at = datetime.now(timezone.utc)
+        user.phone_e164 = phone
+        user.full_name = payload.full_name.strip()
+        user.role = payload.role
+        user.password_hash = hash_password(payload.password)
 
-    tokens = _issue_token_pair(user)
-    # Persist session
-    refresh_payload = decode_token(tokens.refresh_token)
-    session = UserSession(
-        user_id=user.id,
-        refresh_token_jti=refresh_payload["jti"],
-        device_id=payload.device_id,
-        device_platform=payload.device_platform,
-        fcm_token=payload.fcm_token,
-        expires_at=datetime.fromtimestamp(refresh_payload["exp"], tz=timezone.utc),
-    )
-    db.add(session)
-    await audit(db, user.id, user.role.value, "auth.otp_verify", "user", user.id, {"new": is_new})
+    code = await _create_email_verification(db, user)
+    await audit(db, user.id, user.role.value, "auth.register", "user", user.id)
     await db.commit()
-    await db.refresh(user)
+    await send_verification_email(email, code)
+    return RegisterResponse(
+        registered=True,
+        email=email,
+        expires_in_seconds=settings.EMAIL_VERIFICATION_EXPIRE_MINUTES * 60,
+        dev_verification_code=code if settings.EMAIL_DEV_MODE else None,
+    )
 
-    return AuthResponse(user=UserOut.model_validate(user), tokens=tokens)
+
+@router.post("/verify-email")
+async def verify_email(payload: VerifyEmailRequest, db: AsyncSession = Depends(get_db)):
+    email = _normalize_email(str(payload.email))
+    user_res = await db.execute(select(User).where(User.email == email))
+    user = user_res.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid verification request")
+    if user.email_verified_at:
+        return {"verified": True, "role": user.role.value}
+
+    code_res = await db.execute(
+        select(EmailVerificationCode)
+        .where(
+            EmailVerificationCode.user_id == user.id,
+            EmailVerificationCode.consumed.is_(False),
+        )
+        .order_by(EmailVerificationCode.created_at.desc())
+        .limit(1)
+    )
+    verification = code_res.scalar_one_or_none()
+    if not verification:
+        raise HTTPException(status_code=400, detail="No active verification code")
+    if verification.expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Verification code expired")
+    if verification.attempts >= 5:
+        raise HTTPException(status_code=429, detail="Too many attempts. Request a new code.")
+
+    verification.attempts += 1
+    if not verify_password(payload.code, verification.code_hash):
+        await db.commit()
+        raise HTTPException(status_code=400, detail="Invalid verification code")
+
+    verification.consumed = True
+    user.email_verified_at = datetime.now(timezone.utc)
+    user.status = UserStatus.active
+    await _ensure_role_profile(db, user)
+    await audit(db, user.id, user.role.value, "auth.email_verified", "user", user.id)
+    await db.commit()
+    return {"verified": True, "role": user.role.value}
+
+
+@router.post("/resend-email-verification", response_model=RegisterResponse)
+async def resend_email_verification(
+    payload: ResendEmailVerificationRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    email = _normalize_email(str(payload.email))
+    user_res = await db.execute(select(User).where(User.email == email))
+    user = user_res.scalar_one_or_none()
+    if not user or user.email_verified_at:
+        raise HTTPException(status_code=400, detail="Account does not require email verification")
+    code = await _create_email_verification(db, user)
+    await db.commit()
+    await send_verification_email(email, code)
+    return RegisterResponse(
+        registered=True,
+        email=email,
+        expires_in_seconds=settings.EMAIL_VERIFICATION_EXPIRE_MINUTES * 60,
+        dev_verification_code=code if settings.EMAIL_DEV_MODE else None,
+    )
 
 
 @router.post("/login", response_model=AuthResponse)
-async def login_direct(payload: OtpVerifyRequest, db: AsyncSession = Depends(get_db)):
-    """
-    Direct login — OTP step has been removed per product requirement.
-    Phone + role are sufficient to mint a session. Existing user models,
-    JWT, refresh, and session tables are reused unchanged.
-    """
-    phone = _normalize_phone(payload.phone_e164)
-    # Get-or-create user (same logic as verify-otp, OTP check skipped).
-    ures = await db.execute(select(User).where(User.phone_e164 == phone))
+async def login(payload: PasswordLoginRequest, db: AsyncSession = Depends(get_db)):
+    """Authenticate a verified account using email and password."""
+    email = _normalize_email(str(payload.email))
+    ures = await db.execute(select(User).where(User.email == email))
     user = ures.scalar_one_or_none()
-    is_new = False
-    if not user:
-        is_new = True
-        user = User(phone_e164=phone, role=payload.role, status=UserStatus.active)
-        db.add(user)
-        await db.flush()
-        if payload.role == UserRole.consumer:
-            db.add(ConsumerProfile(user_id=user.id))
-        elif payload.role == UserRole.worker:
-            db.add(WorkerProfile(user_id=user.id))
-        await db.flush()
-    else:
-        if user.status == UserStatus.pending_verification:
-            user.status = UserStatus.active
-        user.last_login_at = datetime.now(timezone.utc)
+    if not user or not user.password_hash or not verify_password(payload.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    if not user.email_verified_at:
+        raise HTTPException(status_code=403, detail="Verify your email before signing in")
+    if user.status != UserStatus.active:
+        raise HTTPException(status_code=403, detail="Account is not active")
 
+    user.last_login_at = datetime.now(timezone.utc)
     tokens = _issue_token_pair(user)
-    refresh_payload = decode_token(tokens.refresh_token)
-    db.add(UserSession(
-        user_id=user.id,
-        refresh_token_jti=refresh_payload["jti"],
+    await _persist_session(
+        db,
+        user,
+        tokens,
         device_id=payload.device_id,
         device_platform=payload.device_platform,
         fcm_token=payload.fcm_token,
-        expires_at=datetime.fromtimestamp(refresh_payload["exp"], tz=timezone.utc),
-    ))
-    await audit(db, user.id, user.role.value, "auth.login_direct", "user", user.id, {"new": is_new})
+    )
+    await audit(db, user.id, user.role.value, "auth.password_login", "user", user.id)
     await db.commit()
     await db.refresh(user)
     return AuthResponse(user=UserOut.model_validate(user), tokens=tokens)
@@ -212,6 +301,8 @@ async def refresh_token(payload: RefreshRequest, db: AsyncSession = Depends(get_
 
     ures = await db.execute(select(User).where(User.id == session.user_id))
     user = ures.scalar_one()
+    if user.status != UserStatus.active:
+        raise HTTPException(status_code=403, detail="Account is not active")
     tokens = _issue_token_pair(user)
     # Rotate: revoke old, persist new
     session.revoked = True

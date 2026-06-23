@@ -73,10 +73,36 @@ class RefreshRequest(BaseModel):
 class RegisterRequest(BaseModel):
     phone_e164: str
     full_name: str
-    email: Optional[EmailStr] = None
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=72)
     role: UserRole = UserRole.consumer
-    code: str  # OTP verification code
 
+
+class RegisterResponse(BaseModel):
+    registered: bool
+    email: EmailStr
+    verification_required: bool = True
+    expires_in_seconds: int
+    dev_verification_code: Optional[str] = None
+
+
+
+class VerifyEmailRequest(BaseModel):
+    email: EmailStr
+    code: str = Field(min_length=6, max_length=6)
+
+
+
+class ResendEmailVerificationRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswordLoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+    device_id: Optional[str] = None
+    device_platform: Optional[str] = None
+    fcm_token: Optional[str] = None
 
 class UserOut(ORMModel):
     id: UUID
@@ -85,9 +111,11 @@ class UserOut(ORMModel):
     full_name: Optional[str] = None
     role: UserRole
     status: UserStatus
+    email_verified_at: Optional[datetime] = None
     avatar_url: Optional[str] = None
     preferred_language: str
     created_at: datetime
+    email_verified_at: Optional[datetime] = None
 
 
 class AuthResponse(BaseModel):

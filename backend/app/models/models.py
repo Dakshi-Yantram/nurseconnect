@@ -98,6 +98,7 @@ class User(Base):
     role: Mapped[UserRole] = mapped_column(SQLEnum(UserRole, name="user_role"), nullable=False, index=True)
     status: Mapped[UserStatus] = mapped_column(SQLEnum(UserStatus, name="user_status"), default=UserStatus.pending_verification)
     password_hash: Mapped[Optional[str]] = mapped_column(String(255))
+    email_verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     preferred_language: Mapped[str] = mapped_column(String(5), default="en")
     avatar_url: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, server_default=func.now())
@@ -126,6 +127,18 @@ class OtpCode(Base):
     phone_e164: Mapped[str] = mapped_column(String(20), index=True, nullable=False)
     code_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     purpose: Mapped[str] = mapped_column(String(50), default="login")  # login | signup | reset
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    consumed: Mapped[bool] = mapped_column(Boolean, default=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, server_default=func.now())
+
+
+class EmailVerificationCode(Base):
+    __tablename__ = "email_verification_codes"
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=_uuid)
+    user_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    email: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
+    code_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     consumed: Mapped[bool] = mapped_column(Boolean, default=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -225,6 +238,9 @@ class WorkerProfile(Base):
     razorpay_fund_account_id: Mapped[Optional[str]] = mapped_column(String(100))
     kit_complete: Mapped[bool] = mapped_column(Boolean, default=False)
     background_check_status: Mapped[str] = mapped_column(String(50), default="pending")
+    onboarding_submitted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    onboarding_reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    onboarding_rejection_reason: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now, server_default=func.now())
 

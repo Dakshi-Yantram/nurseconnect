@@ -35,6 +35,18 @@ class Settings(BaseSettings):
     OTP_DEV_FIXED_CODE: str = "123456"
     OTP_EXPIRE_MINUTES: int = 5
 
+    # Email verification
+    EMAIL_VERIFICATION_EXPIRE_MINUTES: int = 15
+    EMAIL_DEV_MODE: bool = True
+    EMAIL_DEV_FIXED_CODE: str = "654321"
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = "no-reply@nurseconnect.app"
+    SMTP_FROM_NAME: str = "NurseConnect"
+    SMTP_USE_TLS: bool = True
+
     # Razorpay
     RAZORPAY_KEY_ID: str = ""
     RAZORPAY_KEY_SECRET: str = ""

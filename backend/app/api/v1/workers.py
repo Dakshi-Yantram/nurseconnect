@@ -1,5 +1,5 @@
 """Worker endpoints: profile, search, public, availability, bank, kit, documents."""
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import List, Optional
 from uuid import UUID
 
@@ -15,6 +15,7 @@ from app.core.deps import (
     get_worker_profile,
     require_roles,
 )
+from app.integrations import cloudinary_client
 from app.models.enums import (
     UserRole,
     WorkerAvailability,
@@ -50,6 +51,64 @@ from app.services.qualification import (
 
 router = APIRouter(prefix="/workers", tags=["workers"])
 
+REQUIRED_WORKER_DOCUMENTS = {
+    "aadhaar",
+    "nursing_license",
+    "education_certificate",
+    "police_verification",
+}
+
+
+class WorkerDocumentUploadRequest(BaseModel):
+    document_type: str
+    data_base64: str
+    document_number: Optional[str] = None
+    valid_until: Optional[date] = None
+
+
+async def _onboarding_snapshot(
+    profile: WorkerProfile,
+    db: AsyncSession,
+) -> dict:
+    user_res = await db.execute(select(User).where(User.id == profile.user_id))
+    user = user_res.scalar_one()
+    docs_res = await db.execute(
+        select(WorkerDocument).where(WorkerDocument.worker_id == profile.id)
+    )
+    docs = list(docs_res.scalars().all())
+    uploaded_types = {d.document_type for d in docs}
+
+    missing_profile_fields = []
+    profile_values = {
+        "full_name": user.full_name,
+        "date_of_birth": profile.date_of_birth,
+        "registration_no": profile.registration_no,
+        "registration_authority": profile.registration_authority,
+        "registration_valid_until": profile.registration_valid_until,
+        "base_city": profile.base_city,
+    }
+    for field, value in profile_values.items():
+        if value is None or (isinstance(value, str) and not value.strip()):
+            missing_profile_fields.append(field)
+    if profile.registration_valid_until and profile.registration_valid_until < date.today():
+        missing_profile_fields.append("registration_valid_until_not_expired")
+
+    missing_documents = sorted(REQUIRED_WORKER_DOCUMENTS - uploaded_types)
+    rejected_documents = sorted(
+        d.document_type for d in docs if d.verification_status == "rejected"
+    )
+    return {
+        "onboarding_status": profile.onboarding_status.value,
+        "background_check_status": profile.background_check_status,
+        "missing_profile_fields": missing_profile_fields,
+        "missing_documents": missing_documents,
+        "rejected_documents": rejected_documents,
+        "can_submit_for_review": not missing_profile_fields and not missing_documents and not rejected_documents,
+        "submitted_at": profile.onboarding_submitted_at,
+        "reviewed_at": profile.onboarding_reviewed_at,
+        "rejection_reason": profile.onboarding_rejection_reason,
+    }
+
 
 @router.get("/me", response_model=WorkerProfileOut)
 async def my_worker_profile(profile: WorkerProfile = Depends(get_worker_profile)):
@@ -62,8 +121,23 @@ async def update_my_worker_profile(
     profile: WorkerProfile = Depends(get_worker_profile),
     db: AsyncSession = Depends(get_db),
 ):
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    credential_fields = {
+        "date_of_birth",
+        "registration_no",
+        "registration_authority",
+        "registration_valid_until",
+    }
+    for field, value in changes.items():
         setattr(profile, field, value)
+    if credential_fields.intersection(changes) and profile.onboarding_status in (
+        WorkerOnboardingStatus.pending_review,
+        WorkerOnboardingStatus.approved,
+        WorkerOnboardingStatus.rejected,
+    ):
+        profile.onboarding_status = WorkerOnboardingStatus.documents_pending
+        profile.onboarding_rejection_reason = None
+        profile.availability = WorkerAvailability.offline
     await db.commit()
     await db.refresh(profile)
     return WorkerProfileOut.model_validate(profile)
@@ -75,6 +149,14 @@ async def toggle_availability(
     profile: WorkerProfile = Depends(get_worker_profile),
     db: AsyncSession = Depends(get_db),
 ):
+    if (
+        payload.availability == WorkerAvailability.online
+        and profile.onboarding_status != WorkerOnboardingStatus.approved
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Caregiver verification must be approved before going online",
+        )
     profile.availability = payload.availability
     await db.commit()
     await db.refresh(profile)
@@ -220,23 +302,121 @@ async def public_worker_profile(worker_id: UUID, db: AsyncSession = Depends(get_
 
 
 # ----- Documents -----
+@router.get("/me/onboarding")
+async def my_onboarding_status(
+    profile: WorkerProfile = Depends(get_worker_profile),
+    db: AsyncSession = Depends(get_db),
+):
+    return await _onboarding_snapshot(profile, db)
+
+
+@router.post("/me/onboarding/submit")
+async def submit_onboarding_for_review(
+    profile: WorkerProfile = Depends(get_worker_profile),
+    db: AsyncSession = Depends(get_db),
+):
+    if profile.onboarding_status == WorkerOnboardingStatus.approved:
+        return await _onboarding_snapshot(profile, db)
+    snapshot = await _onboarding_snapshot(profile, db)
+    if not snapshot["can_submit_for_review"]:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": "Complete the caregiver profile and required documents first",
+                "missing_profile_fields": snapshot["missing_profile_fields"],
+                "missing_documents": snapshot["missing_documents"],
+                "rejected_documents": snapshot["rejected_documents"],
+            },
+        )
+    profile.onboarding_status = WorkerOnboardingStatus.pending_review
+    profile.onboarding_submitted_at = datetime.now(timezone.utc)
+    profile.onboarding_rejection_reason = None
+    if profile.background_check_status in ("pending", "failed"):
+        # This queues the check for a provider/admin integration. It is never
+        # treated as passed until an explicit result is recorded.
+        profile.background_check_status = "queued"
+    await audit(
+        db,
+        profile.user_id,
+        "worker",
+        "worker.onboarding_submitted",
+        "worker",
+        profile.id,
+    )
+    await db.commit()
+    return await _onboarding_snapshot(profile, db)
+
+
 @router.post("/me/documents")
 async def upload_document(
     document_type: str,
     cloudinary_url: str,
     cloudinary_public_id: str,
     document_number: Optional[str] = None,
+    valid_until: Optional[date] = None,
     profile: WorkerProfile = Depends(get_worker_profile),
     db: AsyncSession = Depends(get_db),
 ):
+    if document_type not in REQUIRED_WORKER_DOCUMENTS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported document type. Required types: {sorted(REQUIRED_WORKER_DOCUMENTS)}",
+        )
     doc = WorkerDocument(
         worker_id=profile.id,
         document_type=document_type,
         document_number=document_number,
         cloudinary_url=cloudinary_url,
         cloudinary_public_id=cloudinary_public_id,
+        valid_until=valid_until,
     )
     db.add(doc)
+    if profile.onboarding_status in (
+        WorkerOnboardingStatus.pending_review,
+        WorkerOnboardingStatus.approved,
+        WorkerOnboardingStatus.rejected,
+    ):
+        profile.onboarding_status = WorkerOnboardingStatus.documents_pending
+        profile.onboarding_rejection_reason = None
+        profile.availability = WorkerAvailability.offline
+    await db.commit()
+    await db.refresh(doc)
+    return {"id": str(doc.id), "verification_status": doc.verification_status}
+
+
+@router.post("/me/documents/upload")
+async def upload_document_file(
+    payload: WorkerDocumentUploadRequest,
+    profile: WorkerProfile = Depends(get_worker_profile),
+    db: AsyncSession = Depends(get_db),
+):
+    if payload.document_type not in REQUIRED_WORKER_DOCUMENTS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported document type. Required types: {sorted(REQUIRED_WORKER_DOCUMENTS)}",
+        )
+    upload = await cloudinary_client.upload_base64(
+        payload.data_base64,
+        folder=f"nurseconnect/workers/{profile.id}",
+        resource_type="auto",
+    )
+    doc = WorkerDocument(
+        worker_id=profile.id,
+        document_type=payload.document_type,
+        document_number=payload.document_number,
+        cloudinary_url=upload["secure_url"],
+        cloudinary_public_id=upload["public_id"],
+        valid_until=payload.valid_until,
+    )
+    db.add(doc)
+    if profile.onboarding_status in (
+        WorkerOnboardingStatus.pending_review,
+        WorkerOnboardingStatus.approved,
+        WorkerOnboardingStatus.rejected,
+    ):
+        profile.onboarding_status = WorkerOnboardingStatus.documents_pending
+        profile.onboarding_rejection_reason = None
+        profile.availability = WorkerAvailability.offline
     await db.commit()
     await db.refresh(doc)
     return {"id": str(doc.id), "verification_status": doc.verification_status}

@@ -47,6 +47,8 @@ async def get_current_user(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account suspended")
     if user.status == UserStatus.deactivated:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account deactivated")
+    if user.status == UserStatus.pending_verification:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Email verification required")
     request.state.user_id = user.id
     request.state.user_role = user.role.value
     return CurrentUser(user=user, claims=claims)

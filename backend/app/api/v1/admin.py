@@ -2,7 +2,10 @@
 from typing import List, Optional
 from uuid import UUID
 
+from datetime import date, datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,13 +23,26 @@ from app.models.models import (
     ConsumerProfile,
     Escalation,
     FinancialLedger,
-    Patient, 
     User,
+    WorkerDocument,
     WorkerProfile,
 )
-from app.schemas.schemas import PatientCreate, PatientOut 
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+class DocumentReviewRequest(BaseModel):
+    status: str
+    reason: Optional[str] = None
+
+
+class BackgroundCheckRequest(BaseModel):
+    status: str
+    reason: Optional[str] = None
+
+
+class WorkerRejectionRequest(BaseModel):
+    reason: str
 
 
 @router.get("/dashboard")
@@ -62,7 +78,30 @@ async def pending_workers(
     )
     items = []
     for wp, u in res.all():
-        items.append({"worker_id": str(wp.id), "user_id": str(u.id), "full_name": u.full_name, "phone": u.phone_e164, "tier": wp.tier.value, "created_at": wp.created_at.isoformat()})
+        docs_res = await db.execute(
+            select(WorkerDocument).where(WorkerDocument.worker_id == wp.id)
+        )
+        documents = [
+            {
+                "id": str(doc.id),
+                "document_type": doc.document_type,
+                "verification_status": doc.verification_status,
+                "document_url": doc.cloudinary_url,
+                "rejection_reason": doc.rejection_reason,
+            }
+            for doc in docs_res.scalars().all()
+        ]
+        items.append({
+            "worker_id": str(wp.id),
+            "user_id": str(u.id),
+            "full_name": u.full_name,
+            "phone": u.phone_e164,
+            "email": u.email,
+            "tier": wp.tier.value,
+            "background_check_status": wp.background_check_status,
+            "documents": documents,
+            "created_at": wp.created_at.isoformat(),
+        })
     return items
 
 
@@ -76,9 +115,98 @@ async def approve_worker(
     wp = res.scalar_one_or_none()
     if not wp:
         raise HTTPException(status_code=404, detail="Worker not found")
+    if wp.onboarding_status != WorkerOnboardingStatus.pending_review:
+        raise HTTPException(status_code=409, detail="Worker has not submitted onboarding for review")
+    docs_res = await db.execute(select(WorkerDocument).where(WorkerDocument.worker_id == wp.id))
+    docs = list(docs_res.scalars().all())
+    required = {"aadhaar", "nursing_license", "education_certificate", "police_verification"}
+    verified_types = {
+        d.document_type
+        for d in docs
+        if d.verification_status == "verified"
+        and (d.valid_until is None or d.valid_until >= date.today())
+    }
+    missing_verified = sorted(required - verified_types)
+    if missing_verified:
+        raise HTTPException(
+            status_code=409,
+            detail={"message": "Required documents are not verified", "documents": missing_verified},
+        )
+    if wp.background_check_status != "passed":
+        raise HTTPException(status_code=409, detail="Background check has not passed")
     wp.onboarding_status = WorkerOnboardingStatus.approved
+    wp.onboarding_reviewed_at = datetime.now(timezone.utc)
+    wp.onboarding_rejection_reason = None
     await db.commit()
     return {"approved": True}
+
+
+@router.patch("/workers/{worker_id}/documents/{document_id}")
+async def review_worker_document(
+    worker_id: UUID,
+    document_id: UUID,
+    payload: DocumentReviewRequest,
+    current: CurrentUser = Depends(require_roles(UserRole.admin_ops, UserRole.admin_super)),
+    db: AsyncSession = Depends(get_db),
+):
+    if payload.status not in ("verified", "rejected"):
+        raise HTTPException(status_code=400, detail="Document status must be verified or rejected")
+    res = await db.execute(
+        select(WorkerDocument).where(
+            WorkerDocument.id == document_id,
+            WorkerDocument.worker_id == worker_id,
+        )
+    )
+    doc = res.scalar_one_or_none()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    doc.verification_status = payload.status
+    doc.verified_by = current.id
+    doc.verified_at = datetime.now(timezone.utc)
+    doc.rejection_reason = payload.reason if payload.status == "rejected" else None
+    await db.commit()
+    return {"reviewed": True, "verification_status": doc.verification_status}
+
+
+@router.post("/workers/{worker_id}/background-check")
+async def record_background_check(
+    worker_id: UUID,
+    payload: BackgroundCheckRequest,
+    current: CurrentUser = Depends(require_roles(UserRole.admin_ops, UserRole.admin_super)),
+    db: AsyncSession = Depends(get_db),
+):
+    if payload.status not in ("in_progress", "passed", "failed"):
+        raise HTTPException(status_code=400, detail="Invalid background check status")
+    res = await db.execute(select(WorkerProfile).where(WorkerProfile.id == worker_id))
+    wp = res.scalar_one_or_none()
+    if not wp:
+        raise HTTPException(status_code=404, detail="Worker not found")
+    wp.background_check_status = payload.status
+    if payload.status == "failed":
+        wp.onboarding_status = WorkerOnboardingStatus.rejected
+        wp.onboarding_rejection_reason = payload.reason or "Background check failed"
+        wp.onboarding_reviewed_at = datetime.now(timezone.utc)
+    await db.commit()
+    return {"background_check_status": wp.background_check_status}
+
+
+@router.post("/workers/{worker_id}/reject")
+async def reject_worker(
+    worker_id: UUID,
+    payload: WorkerRejectionRequest,
+    current: CurrentUser = Depends(require_roles(UserRole.admin_ops, UserRole.admin_super)),
+    db: AsyncSession = Depends(get_db),
+):
+    res = await db.execute(select(WorkerProfile).where(WorkerProfile.id == worker_id))
+    wp = res.scalar_one_or_none()
+    if not wp:
+        raise HTTPException(status_code=404, detail="Worker not found")
+    wp.onboarding_status = WorkerOnboardingStatus.rejected
+    wp.onboarding_reviewed_at = datetime.now(timezone.utc)
+    wp.onboarding_rejection_reason = payload.reason.strip()
+    wp.availability = "offline"
+    await db.commit()
+    return {"rejected": True}
 
 
 @router.post("/workers/{worker_id}/suspend")
@@ -149,65 +277,3 @@ async def rematch_booking(
     b.rematch_count += 1
     await db.commit()
     return {"rematch_initiated": True, "attempt": b.rematch_count}
-# ----- Admin: Patients (cross-consumer visibility) -----
-@router.get("/patients", response_model=List[PatientOut])
-async def admin_list_patients(
-    current: CurrentUser = Depends(require_roles(
-        UserRole.admin_ops, UserRole.admin_clinical, UserRole.admin_super
-    )),
-    db: AsyncSession = Depends(get_db),
-):
-    res = await db.execute(select(Patient).order_by(Patient.created_at.desc()))
-    return [PatientOut.model_validate(p) for p in res.scalars().all()]
-
-
-class AdminPatientCreate(PatientCreate):
-    consumer_id: UUID
-
-
-@router.post("/patients", response_model=PatientOut)
-async def admin_create_patient(
-    payload: AdminPatientCreate,
-    current: CurrentUser = Depends(require_roles(
-        UserRole.admin_ops, UserRole.admin_clinical, UserRole.admin_super
-    )),
-    db: AsyncSession = Depends(get_db),
-):
-    res = await db.execute(select(ConsumerProfile).where(ConsumerProfile.id == payload.consumer_id))
-    profile = res.scalar_one_or_none()
-    if not profile:
-        raise HTTPException(status_code=404, detail="Consumer not found")
-
-    data = payload.model_dump(exclude={"consumer_id"})
-    patient = Patient(consumer_id=profile.id, **data)
-    db.add(patient)
-    await db.commit()
-    await db.refresh(patient)
-    return PatientOut.model_validate(patient)
-@router.get("/consumers")
-async def admin_list_consumers(
-    current: CurrentUser = Depends(require_roles(
-        UserRole.admin_ops, UserRole.admin_clinical, UserRole.admin_super
-    )),
-    db: AsyncSession = Depends(get_db),
-):
-    res = await db.execute(
-        select(ConsumerProfile, User).join(User, User.id == ConsumerProfile.user_id)
-    )
-    return [
-        {"id": str(cp.id), "full_name": u.full_name, "phone": u.phone_e164}
-        for cp, u in res.all()
-    ]
-@router.get("/patients/{patient_id}", response_model=PatientOut)
-async def admin_get_patient(
-    patient_id: UUID,
-    current: CurrentUser = Depends(require_roles(
-        UserRole.admin_ops, UserRole.admin_clinical, UserRole.admin_super
-    )),
-    db: AsyncSession = Depends(get_db),
-):
-    res = await db.execute(select(Patient).where(Patient.id == patient_id))
-    p = res.scalar_one_or_none()
-    if not p:
-        raise HTTPException(status_code=404, detail="Patient not found")
-    return PatientOut.model_validate(p)

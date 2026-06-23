@@ -14,7 +14,7 @@ Creates:
 """
 import asyncio
 import logging
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -71,6 +71,24 @@ async def ensure_tables() -> None:
     await _ensure_payment_collected_uniqueness()
     # Patch 4B — add lifecycle columns to pre-existing template tables.
     await _ensure_patch_4b_lifecycle_columns()
+    await _ensure_auth_and_onboarding_columns()
+
+
+async def _ensure_auth_and_onboarding_columns() -> None:
+    """Idempotent columns for verified email auth and caregiver review."""
+    from sqlalchemy import text
+
+    statements = [
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ",
+        "ALTER TABLE worker_profiles ADD COLUMN IF NOT EXISTS onboarding_submitted_at TIMESTAMPTZ",
+        "ALTER TABLE worker_profiles ADD COLUMN IF NOT EXISTS onboarding_reviewed_at TIMESTAMPTZ",
+        "ALTER TABLE worker_profiles ADD COLUMN IF NOT EXISTS onboarding_rejection_reason TEXT",
+    ]
+    async with engine.begin() as conn:
+        if conn.dialect.name != "postgresql":
+            return
+        for stmt in statements:
+            await conn.execute(text(stmt))
 
 
 async def _ensure_patch_4b_lifecycle_columns() -> None:
@@ -739,21 +757,32 @@ async def seed() -> dict:
         # 12. Demo users (dev convenience)
         from app.core.security import hash_password
         demo = [
-            ("+919999000001", "Aanya Sharma", UserRole.consumer),
-            ("+919999000002", "Nurse Riya Kapoor", UserRole.worker),
-            ("+919999000007", "Nurse Meera Iyer", UserRole.worker),  # second worker for race tests
-            ("+919999000003", "Admin Ops", UserRole.admin_ops),
-            ("+919999000004", "Admin Super", UserRole.admin_super),
-            ("+919999000005", "Admin Finance", UserRole.admin_finance),
-            ("+919999000006", "Admin Clinical", UserRole.admin_clinical),
+            ("+919999000001", "aanya@example.com", "Aanya Sharma", UserRole.consumer),
+            ("+919999000002", "riya@example.com", "Nurse Riya Kapoor", UserRole.worker),
+            ("+919999000007", "meera@example.com", "Nurse Meera Iyer", UserRole.worker),  # second worker for race tests
+            ("+919999000003", "ops@example.com", "Admin Ops", UserRole.admin_ops),
+            ("+919999000004", "super@example.com", "Admin Super", UserRole.admin_super),
+            ("+919999000005", "finance@example.com", "Admin Finance", UserRole.admin_finance),
+            ("+919999000006", "clinical@example.com", "Admin Clinical", UserRole.admin_clinical),
         ]
-        for phone, name, role in demo:
+        for phone, email, name, role in demo:
             u_res = await db.execute(select(User).where(User.phone_e164 == phone))
             u = u_res.scalar_one_or_none()
             if not u:
-                u = User(phone_e164=phone, full_name=name, role=role, status=UserStatus.active, password_hash=hash_password("Test@1234"))
+                u = User(
+                    phone_e164=phone,
+                    email=email,
+                    full_name=name,
+                    role=role,
+                    status=UserStatus.active,
+                    password_hash=hash_password("Test@1234"),
+                    email_verified_at=datetime.now(timezone.utc),
+                )
                 db.add(u)
                 await db.flush()
+            elif not u.email:
+                u.email = email
+                u.email_verified_at = datetime.now(timezone.utc)
                 if role == UserRole.consumer:
                     cp = ConsumerProfile(user_id=u.id, city="Mumbai", state="Maharashtra", pincode="400001", address_line1="42 Marine Drive",
                                           latitude=Decimal("18.9430"), longitude=Decimal("72.8235"))
