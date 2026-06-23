@@ -1,5 +1,9 @@
 import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
+<<<<<<< HEAD
 import { useState } from "react";
+=======
+import { useMemo, useState } from "react";
+>>>>>>> c74ce0e (fix: frontend updates)
 import { Card } from "@/components/shared/Card";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -9,10 +13,18 @@ import { RuntimeBoundary } from "@/components/shared/RuntimeBoundary";
 import { WorkflowActionButton } from "@/components/shared/WorkflowActionButton";
 import { SchemaForm } from "@/lib/forms/SchemaForm";
 import { BOOKING_REQUEST_SCHEMA } from "@/lib/forms/templates";
+<<<<<<< HEAD
 import { useOrchestration } from "@/lib/orchestration";
 import { bookingPatientName, bookingService, normalizeBookingDraft } from "@/lib/orchestration/links";
 import { useAuth } from "@/lib/auth-context";
 import { useBookings } from "@/lib/domain";
+=======
+import type { FormSchema } from "@/lib/forms/schema";
+import { useAuth } from "@/lib/auth-context";
+import {
+  useBookings, useConsumerPatients, useServices, useRefetchBookings,
+} from "@/lib/domain";
+>>>>>>> c74ce0e (fix: frontend updates)
 import { bindStatus, parseEnteredAt } from "@/lib/workflow-bind";
 import {
   CalendarCheck, Plus, ChevronRight, Clock, HeartPulse,
@@ -26,6 +38,30 @@ export const Route = createFileRoute("/_app/consumer/bookings")({
   head: () => ({ meta: [{ title: "Bookings — NurseConnect" }] }),
 });
 
+<<<<<<< HEAD
+=======
+const API = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+
+async function apiPost(path: string, body: unknown) {
+  const token = localStorage.getItem("access_token");
+  const res = await fetch(`${API}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(
+      err?.detail?.[0]?.msg ?? err?.detail ?? `Request failed (${res.status})`
+    );
+  }
+  return res.json();
+}
+
+>>>>>>> c74ce0e (fix: frontend updates)
 function BookingsLayout() {
   const pathname = useRouterState({ select: s => s.location.pathname });
   if (pathname === "/consumer/bookings") return <ConsumerBookings />;
@@ -34,6 +70,7 @@ function BookingsLayout() {
 
 function ConsumerBookings() {
   const { user } = useAuth();
+<<<<<<< HEAD
   const store = useOrchestration();
   const [open, setOpen] = useState(false);
 
@@ -42,11 +79,62 @@ function ConsumerBookings() {
   const care = {
     all:       bookings,
     upcoming:  bookings.filter(b =>
+=======
+  const [open, setOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const bookings = useBookings();
+  const patients = useConsumerPatients(user?.id);
+  const services = useServices();
+  const refetchBookings = useRefetchBookings();
+
+  // Build the schema fresh with real patient/service options each time the
+  // modal is opened — keeps templates.ts as the static base schema while
+  // letting these two fields reflect live data.
+  const liveSchema: FormSchema = useMemo(() => {
+    const patientField = BOOKING_REQUEST_SCHEMA.sections[0].fields[0];
+    const serviceField = BOOKING_REQUEST_SCHEMA.sections[0].fields[1];
+
+    return {
+      ...BOOKING_REQUEST_SCHEMA,
+      sections: BOOKING_REQUEST_SCHEMA.sections.map((section, i) => {
+        if (i !== 0) return section;
+        return {
+          ...section,
+          fields: section.fields.map(f => {
+            if (f.key === patientField.key) {
+              return {
+                ...f,
+                kind: "select" as const,
+                options: patients.map(p => ({ label: p.name, value: p.id })),
+              };
+            }
+            if (f.key === serviceField.key) {
+              return {
+                ...f,
+                options: services.map(s => ({ label: s.name, value: s.id })),
+              };
+            }
+            return f;
+          }),
+        };
+      }),
+    };
+  }, [patients, services]);
+
+  const care = {
+    all: bookings,
+    upcoming: bookings.filter(b =>
+>>>>>>> c74ce0e (fix: frontend updates)
       b.rawStatus === "pending_payment" ||
       b.rawStatus === "pending" ||
       b.rawStatus === "claimed"
     ),
+<<<<<<< HEAD
     inCare:    bookings.filter(b =>
+=======
+    inCare: bookings.filter(b =>
+>>>>>>> c74ce0e (fix: frontend updates)
       b.rawStatus === "active" ||
       b.rawStatus === "in_progress"
     ),
@@ -54,6 +142,7 @@ function ConsumerBookings() {
     escalated: bookings.filter(b => b.rawStatus === "escalated"),
   };
 
+<<<<<<< HEAD
   const onCreate = (values: Record<string, unknown>) => {
     const rec = store.createEntity(
       "booking",
@@ -71,6 +160,54 @@ function ConsumerBookings() {
     );
     toast.success(`Booking ${rec.id} requested`);
     setOpen(false);
+=======
+  const onCreate = async (values: Record<string, unknown>) => {
+    const patient = patients.find(p => p.id === values.patient_name);
+    if (!patient) {
+      toast.error("Select a patient");
+      return;
+    }
+    const service = services.find(s => s.id === values.service);
+    if (!service) {
+      toast.error("Select a service");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const created = await apiPost("/api/bookings/", {
+        patient_id: patient.id,
+        service_id: service.id,
+        booking_type: "one_time",
+        scheduled_date: values.preferred_date,
+        scheduled_start_time: (() => {
+          const t = (values.preferred_time as string) || "10:00 AM";
+          const [time, period] = t.split(" ");
+          const [h, m] = time.split(":").map(Number);
+          const hours24 = period === "PM" && h !== 12 ? h + 12 : (period === "AM" && h === 12 ? 0 : h);
+          return `${String(hours24).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`;
+        })(),
+        is_urgent: false,
+        address: {
+          line1: values.area || "—",
+          city: patient.city ?? "—",
+          state: "Karnataka",
+          pincode: "560001",
+        },
+        latitude: 12.9716,
+        longitude: 77.5946,
+        special_instructions: values.notes || undefined,
+      });
+
+      toast.success(`Booking ${created.booking_ref ?? created.id} requested`);
+      setOpen(false);
+      await refetchBookings();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to create booking");
+    } finally {
+      setSubmitting(false);
+    }
+>>>>>>> c74ce0e (fix: frontend updates)
   };
 
   const isEmpty = care.all.length === 0;
@@ -129,7 +266,15 @@ function ConsumerBookings() {
       </div>
 
       <Modal open={open} onClose={() => setOpen(false)} title="Request a new booking" size="xl">
+<<<<<<< HEAD
         <SchemaForm schema={BOOKING_REQUEST_SCHEMA} submitLabel="Request booking" onSubmit={onCreate} />
+=======
+        <SchemaForm
+          schema={liveSchema}
+          submitLabel={submitting ? "Requesting…" : "Request booking"}
+          onSubmit={onCreate}
+        />
+>>>>>>> c74ce0e (fix: frontend updates)
       </Modal>
     </>
   );
@@ -145,9 +290,15 @@ function JourneySection({
 }) {
   const rail =
     tone === "emerald" ? "bg-emerald-500"
+<<<<<<< HEAD
     : tone === "primary" ? "bg-primary"
     : tone === "rose" ? "bg-rose-500"
     : "bg-muted-foreground/40";
+=======
+      : tone === "primary" ? "bg-primary"
+        : tone === "rose" ? "bg-rose-500"
+          : "bg-muted-foreground/40";
+>>>>>>> c74ce0e (fix: frontend updates)
 
   return (
     <Card
@@ -162,6 +313,7 @@ function JourneySection({
       {rows.length === 0
         ? <div className="p-5"><EmptyState icon={CalendarCheck} title="Nothing here yet" description={emptyHint} /></div>
         : rows.map(b => {
+<<<<<<< HEAD
             const state = bindStatus("booking", b.rawStatus);
             return (
               <Link
@@ -189,6 +341,35 @@ function JourneySection({
               </Link>
             );
           })}
+=======
+          const state = bindStatus("booking", b.rawStatus);
+          return (
+            <Link
+              key={b.id}
+              to="/consumer/bookings/$bookingId"
+              params={{ bookingId: b.id }}
+              className="flex items-stretch border-b border-border last:border-0 hover:bg-muted/30"
+            >
+              <span className={`w-1 ${rail}`} aria-hidden />
+              <div className="flex items-center gap-3 flex-1 px-4 py-3">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[13px] font-medium truncate">
+                    {b.patientName} · {b.service}
+                  </div>
+                  <div className="text-[11.5px] text-muted-foreground truncate">
+                    #{b.id} · {b.area ?? "—"}{b.startedAt ? ` · ${b.startedAt}` : ""}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <StatusBadge workflow="booking" state={state} />
+                  <SLAIndicator workflow="booking" state={state} enteredAt={parseEnteredAt(b.startedAt)} />
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                </div>
+              </div>
+            </Link>
+          );
+        })}
+>>>>>>> c74ce0e (fix: frontend updates)
     </Card>
   );
 }

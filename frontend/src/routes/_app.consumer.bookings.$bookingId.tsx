@@ -4,6 +4,7 @@ import {
   CheckCircle2, AlertCircle, XCircle, Ban,
   ClipboardList, Thermometer, Activity, FileText, ArrowRight,
 } from "lucide-react";
+import { useBooking } from "@/lib/domain";
 import { Card } from "@/components/shared/Card";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { SLAIndicator } from "@/components/shared/SLAIndicator";
@@ -81,10 +82,15 @@ const TIMELINE_LABELS: Record<string, string> = {
 function ConsumerBookingDetail() {
   const { bookingId } = Route.useParams();
 
-  // ✅ Correct API: useEntity("booking", id) → calls store.repos["booking"].get(id)
-  const record = useEntity("booking", bookingId);
-  // ✅ Correct API: useEntityHistory("booking", id) → calls store.history.for("booking", id)
+  const domainBooking = useBooking(bookingId);
   const history = useEntityHistory("booking", bookingId);
+
+  const record = domainBooking ? {
+    id: domainBooking.id,
+    state: domainBooking.rawStatus,
+    enteredAt: domainBooking.startedAt,
+    data: {},
+  } : null;
 
   if (!record) {
     return (
@@ -101,18 +107,17 @@ function ConsumerBookingDetail() {
   }
 
   const state = bindStatus("booking", record.state);
-  const service = bookingService(record) ?? "Service";
-  const patientName = bookingPatientName(record) ?? "—";
-  const area = bookingArea(record) ?? "—";
-  const started = bookingStartedAt(record) ?? "—";
-  const duration = bookingDuration(record) ?? "—";
-  const nurse = bookingNurseName(record) ?? "Unassigned";
+  const service = domainBooking?.service ?? "Service";
+  const patientName = domainBooking?.patientName ?? "—";
+  const area = domainBooking?.area ?? "—";
+  const started = domainBooking?.startedAt ?? "—";
+  const duration = domainBooking?.duration ?? "—";
+  const nurse = domainBooking?.nurseName ?? "Unassigned";
 
   const payStatus = derivePaymentStatus(record.state);
   const amount = deriveAmount(service);
   const payCfg = PAYMENT_CONFIG[payStatus];
   const PayIcon = payCfg.icon;
-
   return (
     <div className="space-y-5">
       <BackLink />

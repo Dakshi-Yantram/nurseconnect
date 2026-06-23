@@ -14,6 +14,7 @@ import { OrchestrationProvider } from "@/lib/orchestration";
 
 const API = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
+<<<<<<< HEAD
 async function apiFetch(path: string) {
   const token = localStorage.getItem("access_token");
   const res = await fetch(`${API}${path}`, {
@@ -23,6 +24,22 @@ async function apiFetch(path: string) {
     },
   });
   if (!res.ok) throw new Error(`API error ${res.status}`);
+=======
+async function apiFetch(path: string, init?: RequestInit) {
+  const token = localStorage.getItem("access_token");
+  const res = await fetch(`${API}${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(init?.headers ?? {}),
+    },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.detail?.[0]?.msg ?? err?.detail ?? `API error ${res.status}`);
+  }
+>>>>>>> c74ce0e (fix: frontend updates)
   return res.json();
 }
 
@@ -39,7 +56,11 @@ export interface BookingEntity {
   rawStatus: string;
 }
 
+<<<<<<< HEAD
 export interface VisitEntity extends BookingEntity {}
+=======
+export interface VisitEntity extends BookingEntity { }
+>>>>>>> c74ce0e (fix: frontend updates)
 
 export interface ConsentEntity {
   id: string;
@@ -68,6 +89,16 @@ export interface PackageEntity {
   rawStatus: string;
 }
 
+<<<<<<< HEAD
+=======
+export interface ServiceEntity {
+  id: string;
+  name: string;
+  durationMinutes?: number;
+  basePrice?: number;
+}
+
+>>>>>>> c74ce0e (fix: frontend updates)
 // ---------------------------------------------------------------- Context
 interface DomainState {
   bookings: BookingEntity[];
@@ -76,6 +107,10 @@ interface DomainState {
   consents: ConsentEntity[];
   incidents: IncidentEntity[];
   packages: PackageEntity[];
+<<<<<<< HEAD
+=======
+  services: ServiceEntity[];
+>>>>>>> c74ce0e (fix: frontend updates)
   loading: boolean;
 
   getBooking: (id: string) => BookingEntity | undefined;
@@ -86,6 +121,10 @@ interface DomainState {
   getVisitsForPatientId: (patientId: string) => VisitEntity[];
   getConsentsForPatientId: (patientId: string) => ConsentEntity[];
   getIncidentsForPatientId: (patientId: string) => IncidentEntity[];
+<<<<<<< HEAD
+=======
+  refetchBookings: () => Promise<void>;
+>>>>>>> c74ce0e (fix: frontend updates)
 }
 
 const DomainCtx = createContext<DomainState | null>(null);
@@ -123,7 +162,11 @@ function mapPatient(p: any): Patient {
   return {
     id: p.id ?? "",
     name: p.full_name ?? p.name ?? "—",
+<<<<<<< HEAD
     age: p.age ?? 0,
+=======
+    age: p.age ?? (p.date_of_birth ? new Date().getFullYear() - new Date(p.date_of_birth).getFullYear() : 0),
+>>>>>>> c74ce0e (fix: frontend updates)
     gender: p.gender === "female" ? "F" : "M",
     phone: p.phone_e164 ?? p.phone ?? "—",
     city: p.city ?? "—",
@@ -136,6 +179,19 @@ function mapPatient(p: any): Patient {
   };
 }
 
+<<<<<<< HEAD
+=======
+// ── Map API service → ServiceEntity ───────────────────────────────
+function mapService(s: any): ServiceEntity {
+  return {
+    id: s.id ?? "",
+    name: s.name ?? s.service_code ?? "Service",
+    durationMinutes: s.duration_minutes ?? undefined,
+    basePrice: s.base_price ?? undefined,
+  };
+}
+
+>>>>>>> c74ce0e (fix: frontend updates)
 // ── Build mock fallback data ──────────────────────────────────────
 function buildMockData() {
   const bookings: BookingEntity[] = ACTIVE_VISITS.map(v => ({
@@ -170,6 +226,7 @@ function buildMockData() {
   ];
 
   const packages: PackageEntity[] = [
+<<<<<<< HEAD
     { id: "PKG-101", name: "Geriatric Care Plus",  rawStatus: "active"  },
     { id: "PKG-102", name: "Post-Op Recovery 14d", rawStatus: "active"  },
     { id: "PKG-103", name: "Palliative Live-In",   rawStatus: "on_hold" },
@@ -177,12 +234,30 @@ function buildMockData() {
   ];
 
   return { bookings, visits: bookings, patients: PATIENTS, consents, incidents, packages };
+=======
+    { id: "PKG-101", name: "Geriatric Care Plus", rawStatus: "active" },
+    { id: "PKG-102", name: "Post-Op Recovery 14d", rawStatus: "active" },
+    { id: "PKG-103", name: "Palliative Live-In", rawStatus: "on_hold" },
+    { id: "PKG-104", name: "Diabetes Monitoring", rawStatus: "pending" },
+  ];
+
+  const services: ServiceEntity[] = [
+    { id: "SVC-101", name: "Geriatric Care" },
+    { id: "SVC-102", name: "Wound Dressing" },
+    { id: "SVC-103", name: "Post-Op" },
+    { id: "SVC-104", name: "Diabetes Check" },
+    { id: "SVC-105", name: "IV Therapy" },
+  ];
+
+  return { bookings, visits: bookings, patients: PATIENTS, consents, incidents, packages, services };
+>>>>>>> c74ce0e (fix: frontend updates)
 }
 
 export function DomainProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState(buildMockData);
   const [loading, setLoading] = useState(true);
 
+<<<<<<< HEAD
   useEffect(() => {
     const token = localStorage.getItem("access_token");
     if (!token) { setLoading(false); return; }
@@ -273,10 +348,117 @@ export function DomainProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<DomainState>(() => {
     const { bookings, visits, patients, consents, incidents, packages } = data;
+=======
+  async function load() {
+    const token = localStorage.getItem("access_token");
+    console.log("🔑 Token:", token ? "present" : "MISSING");
+    if (!token) { setLoading(false); return; }
+
+    try {
+      const mock = buildMockData();
+
+      // Fetch all data in parallel
+      const [bookingsRes, patientsRes, servicesRes, packagesRes] = await Promise.allSettled([
+        apiFetch("/api/bookings/consumer"),
+        apiFetch("/api/patients"),
+        apiFetch("/api/services"),
+        apiFetch("/api/care-packages"),
+      ]);
+      console.log("📦 patients:", patientsRes);
+      console.log("🛠 services:", servicesRes);
+
+      // Build lookup maps for patient & service names
+      const patientMap = new Map<string, string>();
+      const serviceMap = new Map<string, string>();
+
+      if (patientsRes.status === "fulfilled") {
+        const list = Array.isArray(patientsRes.value)
+          ? patientsRes.value
+          : (patientsRes.value?.items ?? []);
+        list.forEach((p: any) => patientMap.set(p.id, p.full_name ?? p.name ?? "—"));
+      }
+
+      if (servicesRes.status === "fulfilled") {
+        const list = Array.isArray(servicesRes.value)
+          ? servicesRes.value
+          : (servicesRes.value?.items ?? []);
+        list.forEach((s: any) => serviceMap.set(s.id, s.name ?? s.service_code ?? "Service"));
+      }
+
+      // Map bookings with resolved names
+      const bookings: BookingEntity[] =
+        bookingsRes.status === "fulfilled"
+          ? (Array.isArray(bookingsRes.value)
+            ? bookingsRes.value
+            : (bookingsRes.value?.items ?? [])
+          ).map((b: any) => mapBooking(b, patientMap, serviceMap))
+          : mock.bookings;
+
+      // Map patients
+      const patients: Patient[] =
+        patientsRes.status === "fulfilled"
+          ? (Array.isArray(patientsRes.value)
+            ? patientsRes.value
+            : (patientsRes.value?.items ?? [])
+          ).map(mapPatient)
+          : mock.patients;
+
+      // Map services
+      const services: ServiceEntity[] =
+        servicesRes.status === "fulfilled"
+          ? (Array.isArray(servicesRes.value)
+            ? servicesRes.value
+            : (servicesRes.value?.items ?? [])
+          ).map(mapService)
+          : mock.services;
+
+      // Map packages
+      const packages: PackageEntity[] =
+        packagesRes.status === "fulfilled"
+          ? (Array.isArray(packagesRes.value)
+            ? packagesRes.value
+            : (packagesRes.value?.items ?? [])
+          ).map((p: any) => ({
+            id: p.id ?? "",
+            name: p.name ?? p.package_name ?? "Package",
+            rawStatus: p.is_active ? "active" : "inactive",
+          }))
+          : mock.packages;
+
+      setData({
+        bookings,
+        visits: bookings,
+        patients,
+        consents: mock.consents,
+        incidents: mock.incidents,
+        packages,
+        services,
+      });
+    } catch (e) {
+      console.warn("Domain API load failed, using mock data:", e);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      await load();
+      if (cancelled) return;
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const value = useMemo<DomainState>(() => {
+    const { bookings, visits, patients, consents, incidents, packages, services } = data;
+>>>>>>> c74ce0e (fix: frontend updates)
     const idByName = new Map(patients.map(p => [p.name, p.id] as const));
     const idFor = (name: string) => idByName.get(name);
 
     return {
+<<<<<<< HEAD
       bookings, visits, patients, consents, incidents, packages, loading,
       getBooking:  (id) => bookings.find(b => b.id === id),
       getPatient:  (k)  => patients.find(p => p.id === k || p.name === k),
@@ -284,6 +466,15 @@ export function DomainProvider({ children }: { children: ReactNode }) {
       getConsentsForPatient:  (n) => consents.filter(c => c.patientName === n),
       getIncidentsForPatient: (n) => incidents.filter(i => i.title.includes(n)),
       getVisitsForPatientId:   (id) => visits.filter(v => (v.patientId ?? idFor(v.patientName)) === id),
+=======
+      bookings, visits, patients, consents, incidents, packages, services, loading,
+      getBooking: (id) => bookings.find(b => b.id === id),
+      getPatient: (k) => patients.find(p => p.id === k || p.name === k),
+      getVisitsForPatient: (n) => visits.filter(v => v.patientName === n),
+      getConsentsForPatient: (n) => consents.filter(c => c.patientName === n),
+      getIncidentsForPatient: (n) => incidents.filter(i => i.title.includes(n)),
+      getVisitsForPatientId: (id) => visits.filter(v => (v.patientId ?? idFor(v.patientName)) === id),
+>>>>>>> c74ce0e (fix: frontend updates)
       getConsentsForPatientId: (id) => consents.filter(c => (c.patientId ?? idFor(c.patientName)) === id),
       getIncidentsForPatientId: (id) => {
         const patient = patients.find(p => p.id === id);
@@ -292,6 +483,10 @@ export function DomainProvider({ children }: { children: ReactNode }) {
           return patient ? i.title.includes(patient.name) : false;
         });
       },
+<<<<<<< HEAD
+=======
+      refetchBookings: load,
+>>>>>>> c74ce0e (fix: frontend updates)
     };
   }, [data, loading]);
 
@@ -309,6 +504,7 @@ function useDomainCtx(): DomainState {
 }
 
 // Public hooks ----------------------------------------------------------------
+<<<<<<< HEAD
 export const useBookings  = () => useDomainCtx().bookings;
 export const useVisits    = () => useDomainCtx().visits;
 export const usePatients  = () => useDomainCtx().patients;
@@ -329,6 +525,30 @@ export const useBooking          = (id: string)   => useDomainCtx().getBooking(i
 export const usePatient          = (k: string)    => useDomainCtx().getPatient(k);
 export const usePatientVisits    = (name: string) => useDomainCtx().getVisitsForPatient(name);
 export const usePatientConsents  = (name: string) => useDomainCtx().getConsentsForPatient(name);
+=======
+export const useBookings = () => useDomainCtx().bookings;
+export const useVisits = () => useDomainCtx().visits;
+export const usePatients = () => useDomainCtx().patients;
+export const useConsents = () => useDomainCtx().consents;
+export const useIncidents = () => useDomainCtx().incidents;
+export const usePackages = () => useDomainCtx().packages;
+export const useServices = () => useDomainCtx().services;
+export const useDomainLoading = () => useDomainCtx().loading;
+export const useRefetchBookings = () => useDomainCtx().refetchBookings;
+
+export const useConsumerPatients = (ownerId: string | null | undefined) => {
+  const all = useDomainCtx().patients;
+  return useMemo(() => {
+    if (!ownerId) return all;
+    const filtered = all.filter(p => (p as any).ownerId === ownerId);
+    return filtered.length > 0 ? filtered : all; // ← add this fallback
+  }, [all, ownerId]);
+};
+export const useBooking = (id: string) => useDomainCtx().getBooking(id);
+export const usePatient = (k: string) => useDomainCtx().getPatient(k);
+export const usePatientVisits = (name: string) => useDomainCtx().getVisitsForPatient(name);
+export const usePatientConsents = (name: string) => useDomainCtx().getConsentsForPatient(name);
+>>>>>>> c74ce0e (fix: frontend updates)
 export const usePatientIncidents = (name: string) => useDomainCtx().getIncidentsForPatient(name);
 
 export const usePatientVisitsById = (id: string | null | undefined): VisitEntity[] => {
@@ -347,6 +567,7 @@ export const usePatientIncidentsById = (id: string | null | undefined): Incident
 export function useDomainSummary() {
   const d = useDomainCtx();
   return {
+<<<<<<< HEAD
     activeBookings:  d.bookings.length,
     patients:        d.patients.length,
     pendingConsents: d.consents.filter(c => c.rawStatus === "blocked").length,
@@ -357,4 +578,16 @@ export function useDomainSummary() {
 
 export const ADMIN_PAYOUTS    = PAYOUTS;
 export const ADMIN_DISPUTES   = DISPUTES;
+=======
+    activeBookings: d.bookings.length,
+    patients: d.patients.length,
+    pendingConsents: d.consents.filter(c => c.rawStatus === "blocked").length,
+    openIncidents: d.incidents.filter(i => i.rawStatus !== "resolved").length,
+    activePackages: d.packages.filter(p => p.rawStatus === "active").length,
+  };
+}
+
+export const ADMIN_PAYOUTS = PAYOUTS;
+export const ADMIN_DISPUTES = DISPUTES;
+>>>>>>> c74ce0e (fix: frontend updates)
 export const ADMIN_COMPLAINTS = COMPLAINTS;

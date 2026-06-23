@@ -18,9 +18,8 @@ import {
 
 export const Route = createFileRoute("/_app/bookings/$bookingId")({
   component: AdminBookingDetail,
-  head: () => ({ meta: [{ title: "Booking — NurseConnect Admin" }] }),
+  head: () => ({ meta: [{ title: "Booking — NurseConnect" }] }),
 });
-
 type PaymentStatus = "paid" | "pending" | "failed" | "refunded" | "processing";
 
 function derivePaymentStatus(bookingState: string): PaymentStatus {
@@ -186,8 +185,8 @@ function AdminBookingDetail() {
 
 function BackLink() {
   return (
-    <Link to="/ops-dashboard" className="inline-flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground">
-      <ArrowLeft className="h-3.5 w-3.5" /> Back to ops dashboard
+    <Link to="/consumer/bookings" className="inline-flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground">
+      <ArrowLeft className="h-3.5 w-3.5" /> Back to bookings
     </Link>
   );
 }

@@ -3,7 +3,11 @@ import { useState } from "react";
 import { ShieldCheck, Clock, HeartHandshake, ArrowRight } from "lucide-react";
 import logo from "@/assets/yantram-logo.jpg";
 import { useAuth } from "@/lib/auth-context";
+<<<<<<< HEAD
 import { ROLES, portalHome, portalForRole, routePortal, type Role } from "@/lib/rbac";
+=======
+import { portalHome, portalForRole, routePortal, SELF_REGISTER_ROLES, type Role, type SelfRegisterRole } from "@/lib/rbac";
+>>>>>>> c74ce0e (fix: frontend updates)
 
 export const Route = createFileRoute("/auth/login")({
   component: LoginPage,
@@ -35,6 +39,7 @@ function safeRedirect(role: Role, raw: string | undefined): string | null {
   }
 }
 
+<<<<<<< HEAD
 type Persona = "consumer" | "partner" | "admin";
 
 const PERSONA_LABEL: Record<Persona, string> = {
@@ -63,6 +68,8 @@ const ROLE_TO_BACKEND: Record<string, string> = {
   super_admin: "admin_super",
 };
 
+=======
+>>>>>>> c74ce0e (fix: frontend updates)
 // Map backend role → frontend role
 const BACKEND_TO_ROLE: Record<string, Role> = {
   consumer:      "consumer",
@@ -73,6 +80,7 @@ const BACKEND_TO_ROLE: Record<string, Role> = {
   admin_clinical: "admin",
 };
 
+<<<<<<< HEAD
 // Demo phone numbers per persona
 const DEMO_PHONES: Record<string, string> = {
   consumer:   "+919999000001",
@@ -86,26 +94,88 @@ async function apiLogin(phone_e164: string, backendRole: string) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ phone_e164, role: backendRole, code: "123456" }),
+=======
+// Map frontend self-register role → backend role string
+const SELF_ROLE_TO_BACKEND: Record<SelfRegisterRole, string> = {
+  consumer: "consumer",
+  partner:  "worker",
+};
+
+async function apiRequest(path: string, body: unknown) {
+  const res = await fetch(`${API}/api${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+>>>>>>> c74ce0e (fix: frontend updates)
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(
+<<<<<<< HEAD
       err?.detail?.[0]?.msg ?? err?.detail ?? `Login failed (${res.status})`
+=======
+      err?.detail?.[0]?.msg ?? err?.detail ?? `Request failed (${res.status})`
+>>>>>>> c74ce0e (fix: frontend updates)
     );
   }
   return res.json();
 }
 
+<<<<<<< HEAD
+=======
+async function apiLogin(email: string, password: string) {
+  return apiRequest("/auth/login", { email, password });
+}
+
+async function apiRegister(input: {
+  full_name: string;
+  email: string;
+  phone_e164: string;
+  password: string;
+  role: string;
+}) {
+  return apiRequest("/auth/register", input);
+}
+
+async function apiVerifyEmail(email: string, code: string) {
+  return apiRequest("/auth/verify-email", { email, code });
+}
+
+>>>>>>> c74ce0e (fix: frontend updates)
 function saveTokens(access: string, refresh: string) {
   localStorage.setItem("access_token", access);
   localStorage.setItem("refresh_token", refresh);
 }
 
+<<<<<<< HEAD
+=======
+function normalizePhone(raw: string): string {
+  const p = raw.replace(/\s+/g, "").replace(/-/g, "");
+  if (p.startsWith("+")) return p;
+  return `+91${p.replace(/^0/, "")}`;
+}
+
+const PASSWORD_HINT = "8+ characters, with an uppercase letter, lowercase letter, and a number.";
+
+function isPasswordValid(pw: string): boolean {
+  return (
+    pw.length >= 8 &&
+    pw.length <= 72 &&
+    /[A-Z]/.test(pw) &&
+    /[a-z]/.test(pw) &&
+    /\d/.test(pw)
+  );
+}
+
+type Mode = "signin" | "register" | "verify";
+
+>>>>>>> c74ce0e (fix: frontend updates)
 function LoginPage() {
   const nav = useNavigate();
   const { signIn, isAuthenticated, user, hydrated } = useAuth();
   const { redirect } = useSearch({ from: "/auth/login" });
 
+<<<<<<< HEAD
   const [phone, setPhone] = useState("+91 99990 00001");
   const [persona, setPersona] = useState<Persona>("consumer");
   const [role, setRole] = useState<Role>(PERSONA_DEFAULT.consumer);
@@ -121,11 +191,36 @@ function LoginPage() {
     setPhone(DEMO_PHONES[PERSONA_DEFAULT[p]] ?? "+919999000001");
   };
 
+=======
+  const [mode, setMode] = useState<Mode>("signin");
+
+  // Sign in
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  // Register
+  const [fullName, setFullName] = useState("");
+  const [regEmail, setRegEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [regPassword, setRegPassword] = useState("");
+  const [regRole, setRegRole] = useState<SelfRegisterRole>("consumer");
+
+  // Verify
+  const [verifyEmail, setVerifyEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [devCode, setDevCode] = useState<string | null>(null);
+
+  const [info, setInfo] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+>>>>>>> c74ce0e (fix: frontend updates)
   if (hydrated && isAuthenticated && user) {
     const target = safeRedirect(user.role, redirect) ?? portalHome(user.role);
     return <Navigate to={target as string} />;
   }
 
+<<<<<<< HEAD
   const doLogin = async (phone_e164: string, frontendRole: Role, displayName?: string) => {
     const backendRole = ROLE_TO_BACKEND[frontendRole] ?? "consumer";
     const data = await apiLogin(phone_e164, backendRole);
@@ -141,10 +236,20 @@ function LoginPage() {
   };
 
   const submit = async (e: React.FormEvent) => {
+=======
+  const switchMode = (m: Mode) => {
+    setMode(m);
+    setError(null);
+    setInfo(null);
+  };
+
+  const submitSignIn = async (e: React.FormEvent) => {
+>>>>>>> c74ce0e (fix: frontend updates)
     e.preventDefault();
     setError(null);
     setLoading(true);
     try {
+<<<<<<< HEAD
       // Normalize phone to E.164
       const raw = phone.replace(/\s+/g, "").replace(/-/g, "");
       const phone_e164 = raw.startsWith("+") ? raw : `+91${raw.replace(/^0/, "")}`;
@@ -157,6 +262,19 @@ function LoginPage() {
       const mappedRole = await doLogin(phone_e164, safeRole);
       const target = safeRedirect(mappedRole, redirect) ?? portalHome(mappedRole);
       setTimeout(() => nav({ to: target as string }), 0);
+=======
+      const data = await apiLogin(email, password);
+      saveTokens(data.tokens.access_token, data.tokens.refresh_token);
+      const mappedRole = BACKEND_TO_ROLE[data.user.role] ?? "consumer";
+      signIn({
+        id: data.user.id,
+        name: data.user.full_name ?? "User",
+        email: data.user.email,
+        role: mappedRole,
+      });
+      const target = safeRedirect(mappedRole, redirect) ?? portalHome(mappedRole);
+      nav({ to: target as string });
+>>>>>>> c74ce0e (fix: frontend updates)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {
@@ -164,6 +282,7 @@ function LoginPage() {
     }
   };
 
+<<<<<<< HEAD
   const quickLogin = async (frontendRole: Role, displayName: string, to: string) => {
     setError(null);
     setLoading(true);
@@ -173,6 +292,48 @@ function LoginPage() {
       setTimeout(() => nav({ to }), 0);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Login failed");
+=======
+  const submitRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    if (!fullName.trim()) return setError("Full name is required");
+    if (!phone.trim()) return setError("Mobile number is required");
+    if (!isPasswordValid(regPassword)) return setError(PASSWORD_HINT);
+
+    setLoading(true);
+    try {
+      const data = await apiRegister({
+        full_name: fullName.trim(),
+        email: regEmail.trim(),
+        phone_e164: normalizePhone(phone),
+        password: regPassword,
+        role: SELF_ROLE_TO_BACKEND[regRole],
+      });
+      setVerifyEmail(data.email ?? regEmail.trim());
+      setDevCode(data.dev_verification_code ?? null);
+      setInfo("We've emailed you a verification code.");
+      setMode("verify");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Registration failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const submitVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+    try {
+      await apiVerifyEmail(verifyEmail, code);
+      setEmail(verifyEmail);
+      setPassword("");
+      setInfo("Email verified — sign in to continue.");
+      setMode("signin");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Verification failed");
+>>>>>>> c74ce0e (fix: frontend updates)
     } finally {
       setLoading(false);
     }
@@ -225,6 +386,7 @@ function LoginPage() {
             <div className="text-lg font-semibold">NurseConnect</div>
           </div>
           <div className="nc-card p-8">
+<<<<<<< HEAD
             <div className="flex items-center gap-1 p-1 rounded-md bg-secondary/60 mb-4 text-[12px] font-medium">
               {(["signin","register"] as const).map(m => (
                 <button key={m} type="button"
@@ -337,6 +499,224 @@ function LoginPage() {
             <p className="mt-2 text-center text-[11px] text-muted-foreground">
               Demo shortcuts use seed accounts (OTP: 123456)
             </p>
+=======
+            {mode !== "verify" && (
+              <div className="flex items-center gap-1 p-1 rounded-md bg-secondary/60 mb-4 text-[12px] font-medium">
+                {(["signin", "register"] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => switchMode(m)}
+                    className={`flex-1 px-3 py-1.5 rounded-md transition ${mode === m ? "bg-card shadow-sm text-foreground" : "text-muted-foreground"}`}
+                  >
+                    {m === "signin" ? "Sign in" : "Register"}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {mode === "signin" && (
+              <>
+                <h2 className="text-2xl font-semibold tracking-tight">Welcome Back</h2>
+                <p className="text-sm text-muted-foreground mt-1">Login to continue to your portal</p>
+
+                <form className="mt-6 space-y-4" onSubmit={submitSignIn}>
+                  <div>
+                    <label className="text-[12px] font-medium text-foreground">Email</label>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="you@example.com"
+                      autoComplete="email"
+                      className="mt-1.5 w-full px-3 py-2.5 text-[14px] rounded-md border border-border bg-card focus:outline-none focus:ring-2 focus:ring-ring/40"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[12px] font-medium text-foreground">Password</label>
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••"
+                      autoComplete="current-password"
+                      className="mt-1.5 w-full px-3 py-2.5 text-[14px] rounded-md border border-border bg-card focus:outline-none focus:ring-2 focus:ring-ring/40"
+                    />
+                  </div>
+
+                  {info && (
+                    <div className="text-[13px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-3 py-2">
+                      {info}
+                    </div>
+                  )}
+                  {error && (
+                    <div className="text-[13px] text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+                      {error}
+                    </div>
+                  )}
+
+                  <button
+                    disabled={loading}
+                    className="w-full inline-flex items-center justify-center gap-2 bg-primary text-primary-foreground py-2.5 rounded-md font-medium hover:opacity-95 disabled:opacity-60 transition"
+                  >
+                    {loading ? "Logging in…" : "Login"}
+                    <ArrowRight className="h-4 w-4" />
+                  </button>
+                </form>
+
+                <div className="mt-6 text-[13px] text-muted-foreground text-center">
+                  Don't have an account?{" "}
+                  <button type="button" onClick={() => switchMode("register")} className="text-primary font-medium">
+                    Register
+                  </button>
+                </div>
+              </>
+            )}
+
+            {mode === "register" && (
+              <>
+                <h2 className="text-2xl font-semibold tracking-tight">Join the marketplace</h2>
+                <p className="text-sm text-muted-foreground mt-1">Self-register as a family or care professional</p>
+
+                <form className="mt-6 space-y-4" onSubmit={submitRegister}>
+                  <div>
+                    <label className="text-[12px] font-medium text-foreground">Full name</label>
+                    <input
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      placeholder="e.g. Asha Mehra"
+                      className="mt-1.5 w-full px-3 py-2.5 text-[14px] rounded-md border border-border bg-card focus:outline-none focus:ring-2 focus:ring-ring/40"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[12px] font-medium text-foreground">Email</label>
+                    <input
+                      type="email"
+                      value={regEmail}
+                      onChange={(e) => setRegEmail(e.target.value)}
+                      placeholder="you@example.com"
+                      autoComplete="email"
+                      className="mt-1.5 w-full px-3 py-2.5 text-[14px] rounded-md border border-border bg-card focus:outline-none focus:ring-2 focus:ring-ring/40"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[12px] font-medium text-foreground">Mobile Number</label>
+                    <input
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="+91 99999 00001"
+                      className="mt-1.5 w-full px-3 py-2.5 text-[14px] rounded-md border border-border bg-card focus:outline-none focus:ring-2 focus:ring-ring/40"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[12px] font-medium text-foreground">Password</label>
+                    <input
+                      type="password"
+                      value={regPassword}
+                      onChange={(e) => setRegPassword(e.target.value)}
+                      placeholder="••••••••"
+                      autoComplete="new-password"
+                      className="mt-1.5 w-full px-3 py-2.5 text-[14px] rounded-md border border-border bg-card focus:outline-none focus:ring-2 focus:ring-ring/40"
+                    />
+                    <p className="mt-1 text-[11px] text-muted-foreground">{PASSWORD_HINT}</p>
+                  </div>
+                  <div>
+                    <label className="text-[12px] font-medium text-foreground">I am a</label>
+                    <div className="mt-1.5 grid grid-cols-2 gap-1.5 p-1 rounded-md bg-secondary/60 text-[12px] font-medium">
+                      {SELF_REGISTER_ROLES.map((r) => (
+                        <button
+                          key={r.id}
+                          type="button"
+                          onClick={() => setRegRole(r.id)}
+                          className={`px-2 py-1.5 rounded-md transition ${regRole === r.id ? "bg-card shadow-sm text-foreground" : "text-muted-foreground"}`}
+                        >
+                          {r.label}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="mt-1.5 text-[11px] text-muted-foreground">
+                      {SELF_REGISTER_ROLES.find((r) => r.id === regRole)?.tagline}
+                    </p>
+                  </div>
+
+                  {error && (
+                    <div className="text-[13px] text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+                      {error}
+                    </div>
+                  )}
+
+                  <button
+                    disabled={loading}
+                    className="w-full inline-flex items-center justify-center gap-2 bg-primary text-primary-foreground py-2.5 rounded-md font-medium hover:opacity-95 disabled:opacity-60 transition"
+                  >
+                    {loading ? "Creating account…" : "Create account"}
+                    <ArrowRight className="h-4 w-4" />
+                  </button>
+                </form>
+
+                <div className="mt-6 text-[13px] text-muted-foreground text-center">
+                  Already registered?{" "}
+                  <button type="button" onClick={() => switchMode("signin")} className="text-primary font-medium">
+                    Sign in
+                  </button>
+                </div>
+              </>
+            )}
+
+            {mode === "verify" && (
+              <>
+                <h2 className="text-2xl font-semibold tracking-tight">Verify your email</h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  We sent a code to <span className="font-medium text-foreground">{verifyEmail}</span>
+                </p>
+
+                <form className="mt-6 space-y-4" onSubmit={submitVerify}>
+                  <div>
+                    <label className="text-[12px] font-medium text-foreground">Verification code</label>
+                    <input
+                      value={code}
+                      onChange={(e) => setCode(e.target.value)}
+                      placeholder="123456"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      className="mt-1.5 w-full px-3 py-2.5 text-[14px] rounded-md border border-border bg-card focus:outline-none focus:ring-2 focus:ring-ring/40"
+                    />
+                    {devCode && (
+                      <p className="mt-1.5 text-[11px] text-muted-foreground">
+                        Dev mode code: <span className="font-mono">{devCode}</span>
+                      </p>
+                    )}
+                  </div>
+
+                  {info && (
+                    <div className="text-[13px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-3 py-2">
+                      {info}
+                    </div>
+                  )}
+                  {error && (
+                    <div className="text-[13px] text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+                      {error}
+                    </div>
+                  )}
+
+                  <button
+                    disabled={loading}
+                    className="w-full inline-flex items-center justify-center gap-2 bg-primary text-primary-foreground py-2.5 rounded-md font-medium hover:opacity-95 disabled:opacity-60 transition"
+                  >
+                    {loading ? "Verifying…" : "Verify email"}
+                    <ArrowRight className="h-4 w-4" />
+                  </button>
+                </form>
+
+                <div className="mt-6 text-[13px] text-muted-foreground text-center">
+                  Wrong email?{" "}
+                  <button type="button" onClick={() => switchMode("register")} className="text-primary font-medium">
+                    Go back
+                  </button>
+                </div>
+              </>
+            )}
+>>>>>>> c74ce0e (fix: frontend updates)
           </div>
         </div>
       </div>

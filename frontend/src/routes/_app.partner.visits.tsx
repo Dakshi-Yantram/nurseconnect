@@ -1,6 +1,15 @@
+<<<<<<< HEAD
 import { createFileRoute, Outlet } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_app/partner/visits")({
   component: () => <Outlet />,
   head: () => ({ meta: [{ title: "Visits — NurseConnect" }] }),
 });
+=======
+import { createFileRoute, Outlet } from "@tanstack/react-router";
+
+export const Route = createFileRoute("/_app/partner/visits")({
+  component: () => <Outlet />,
+  head: () => ({ meta: [{ title: "Visits — NurseConnect" }] }),
+});
+>>>>>>> c74ce0e (fix: frontend updates)
