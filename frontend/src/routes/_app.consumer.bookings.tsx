@@ -1,9 +1,5 @@
-import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
-<<<<<<< HEAD
-import { useState } from "react";
-=======
+﻿import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
->>>>>>> c74ce0e (fix: frontend updates)
 import { Card } from "@/components/shared/Card";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -13,18 +9,11 @@ import { RuntimeBoundary } from "@/components/shared/RuntimeBoundary";
 import { WorkflowActionButton } from "@/components/shared/WorkflowActionButton";
 import { SchemaForm } from "@/lib/forms/SchemaForm";
 import { BOOKING_REQUEST_SCHEMA } from "@/lib/forms/templates";
-<<<<<<< HEAD
-import { useOrchestration } from "@/lib/orchestration";
-import { bookingPatientName, bookingService, normalizeBookingDraft } from "@/lib/orchestration/links";
-import { useAuth } from "@/lib/auth-context";
-import { useBookings } from "@/lib/domain";
-=======
 import type { FormSchema } from "@/lib/forms/schema";
 import { useAuth } from "@/lib/auth-context";
 import {
   useBookings, useConsumerPatients, useServices, useRefetchBookings,
 } from "@/lib/domain";
->>>>>>> c74ce0e (fix: frontend updates)
 import { bindStatus, parseEnteredAt } from "@/lib/workflow-bind";
 import {
   CalendarCheck, Plus, ChevronRight, Clock, HeartPulse,
@@ -35,11 +24,9 @@ import type { ReactNode } from "react";
 
 export const Route = createFileRoute("/_app/consumer/bookings")({
   component: BookingsLayout,
-  head: () => ({ meta: [{ title: "Bookings — NurseConnect" }] }),
+  head: () => ({ meta: [{ title: "Bookings â€” NurseConnect" }] }),
 });
 
-<<<<<<< HEAD
-=======
 const API = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
 async function apiPost(path: string, body: unknown) {
@@ -61,7 +48,6 @@ async function apiPost(path: string, body: unknown) {
   return res.json();
 }
 
->>>>>>> c74ce0e (fix: frontend updates)
 function BookingsLayout() {
   const pathname = useRouterState({ select: s => s.location.pathname });
   if (pathname === "/consumer/bookings") return <ConsumerBookings />;
@@ -70,16 +56,6 @@ function BookingsLayout() {
 
 function ConsumerBookings() {
   const { user } = useAuth();
-<<<<<<< HEAD
-  const store = useOrchestration();
-  const [open, setOpen] = useState(false);
-
-  // ── Use API bookings from DomainContext instead of orchestration store ──
-  const bookings = useBookings();
-  const care = {
-    all:       bookings,
-    upcoming:  bookings.filter(b =>
-=======
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -89,7 +65,7 @@ function ConsumerBookings() {
   const refetchBookings = useRefetchBookings();
 
   // Build the schema fresh with real patient/service options each time the
-  // modal is opened — keeps templates.ts as the static base schema while
+  // modal is opened â€” keeps templates.ts as the static base schema while
   // letting these two fields reflect live data.
   const liveSchema: FormSchema = useMemo(() => {
     const patientField = BOOKING_REQUEST_SCHEMA.sections[0].fields[0];
@@ -125,16 +101,11 @@ function ConsumerBookings() {
   const care = {
     all: bookings,
     upcoming: bookings.filter(b =>
->>>>>>> c74ce0e (fix: frontend updates)
       b.rawStatus === "pending_payment" ||
       b.rawStatus === "pending" ||
       b.rawStatus === "claimed"
     ),
-<<<<<<< HEAD
-    inCare:    bookings.filter(b =>
-=======
     inCare: bookings.filter(b =>
->>>>>>> c74ce0e (fix: frontend updates)
       b.rawStatus === "active" ||
       b.rawStatus === "in_progress"
     ),
@@ -142,25 +113,6 @@ function ConsumerBookings() {
     escalated: bookings.filter(b => b.rawStatus === "escalated"),
   };
 
-<<<<<<< HEAD
-  const onCreate = (values: Record<string, unknown>) => {
-    const rec = store.createEntity(
-      "booking",
-      normalizeBookingDraft({
-        values,
-        owner: {
-          id:   user?.id ?? null,
-          role: user?.role ?? null,
-          name: user?.name ?? user?.email ?? null,
-        },
-      }),
-      user?.email ?? "consumer@nurseconnect.in",
-      user?.role ?? null,
-      { notes: "Booking requested" },
-    );
-    toast.success(`Booking ${rec.id} requested`);
-    setOpen(false);
-=======
   const onCreate = async (values: Record<string, unknown>) => {
     const patient = patients.find(p => p.id === values.patient_name);
     if (!patient) {
@@ -189,8 +141,8 @@ function ConsumerBookings() {
         })(),
         is_urgent: false,
         address: {
-          line1: values.area || "—",
-          city: patient.city ?? "—",
+          line1: values.area || "â€”",
+          city: patient.city ?? "â€”",
           state: "Karnataka",
           pincode: "560001",
         },
@@ -207,7 +159,6 @@ function ConsumerBookings() {
     } finally {
       setSubmitting(false);
     }
->>>>>>> c74ce0e (fix: frontend updates)
   };
 
   const isEmpty = care.all.length === 0;
@@ -219,7 +170,7 @@ function ConsumerBookings() {
           <div>
             <div className="text-[16px] font-semibold">Booking journey</div>
             <div className="text-[12.5px] text-muted-foreground">
-              Visits grouped by care stage — alerts, what's happening now, what's coming next, and what has recently completed.
+              Visits grouped by care stage â€” alerts, what's happening now, what's coming next, and what has recently completed.
             </div>
           </div>
           <WorkflowActionButton action="consumer.create_booking" icon={<Plus className="h-3.5 w-3.5" />}
@@ -266,15 +217,11 @@ function ConsumerBookings() {
       </div>
 
       <Modal open={open} onClose={() => setOpen(false)} title="Request a new booking" size="xl">
-<<<<<<< HEAD
-        <SchemaForm schema={BOOKING_REQUEST_SCHEMA} submitLabel="Request booking" onSubmit={onCreate} />
-=======
         <SchemaForm
           schema={liveSchema}
-          submitLabel={submitting ? "Requesting…" : "Request booking"}
+          submitLabel={submitting ? "Requestingâ€¦" : "Request booking"}
           onSubmit={onCreate}
         />
->>>>>>> c74ce0e (fix: frontend updates)
       </Modal>
     </>
   );
@@ -290,15 +237,9 @@ function JourneySection({
 }) {
   const rail =
     tone === "emerald" ? "bg-emerald-500"
-<<<<<<< HEAD
-    : tone === "primary" ? "bg-primary"
-    : tone === "rose" ? "bg-rose-500"
-    : "bg-muted-foreground/40";
-=======
       : tone === "primary" ? "bg-primary"
         : tone === "rose" ? "bg-rose-500"
           : "bg-muted-foreground/40";
->>>>>>> c74ce0e (fix: frontend updates)
 
   return (
     <Card
@@ -313,35 +254,6 @@ function JourneySection({
       {rows.length === 0
         ? <div className="p-5"><EmptyState icon={CalendarCheck} title="Nothing here yet" description={emptyHint} /></div>
         : rows.map(b => {
-<<<<<<< HEAD
-            const state = bindStatus("booking", b.rawStatus);
-            return (
-              <Link
-                key={b.id}
-                to="/consumer/bookings/$bookingId"
-                params={{ bookingId: b.id }}
-                className="flex items-stretch border-b border-border last:border-0 hover:bg-muted/30"
-              >
-                <span className={`w-1 ${rail}`} aria-hidden />
-                <div className="flex items-center gap-3 flex-1 px-4 py-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[13px] font-medium truncate">
-                      {b.patientName} · {b.service}
-                    </div>
-                    <div className="text-[11.5px] text-muted-foreground truncate">
-                      #{b.id} · {b.area ?? "—"}{b.startedAt ? ` · ${b.startedAt}` : ""}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <StatusBadge workflow="booking" state={state} />
-                    <SLAIndicator workflow="booking" state={state} enteredAt={parseEnteredAt(b.startedAt)} />
-                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                </div>
-              </Link>
-            );
-          })}
-=======
           const state = bindStatus("booking", b.rawStatus);
           return (
             <Link
@@ -354,10 +266,10 @@ function JourneySection({
               <div className="flex items-center gap-3 flex-1 px-4 py-3">
                 <div className="min-w-0 flex-1">
                   <div className="text-[13px] font-medium truncate">
-                    {b.patientName} · {b.service}
+                    {b.patientName} Â· {b.service}
                   </div>
                   <div className="text-[11.5px] text-muted-foreground truncate">
-                    #{b.id} · {b.area ?? "—"}{b.startedAt ? ` · ${b.startedAt}` : ""}
+                    #{b.id} Â· {b.area ?? "â€”"}{b.startedAt ? ` Â· ${b.startedAt}` : ""}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
@@ -369,7 +281,6 @@ function JourneySection({
             </Link>
           );
         })}
->>>>>>> c74ce0e (fix: frontend updates)
     </Card>
   );
 }

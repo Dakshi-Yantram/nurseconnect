@@ -1,17 +1,13 @@
-import { createFileRoute, Navigate, useNavigate, useSearch } from "@tanstack/react-router";
+﻿import { createFileRoute, Navigate, useNavigate, useSearch } from "@tanstack/react-router";
 import { useState } from "react";
 import { ShieldCheck, Clock, HeartHandshake, ArrowRight } from "lucide-react";
 import logo from "@/assets/yantram-logo.jpg";
 import { useAuth } from "@/lib/auth-context";
-<<<<<<< HEAD
-import { ROLES, portalHome, portalForRole, routePortal, type Role } from "@/lib/rbac";
-=======
 import { portalHome, portalForRole, routePortal, SELF_REGISTER_ROLES, type Role, type SelfRegisterRole } from "@/lib/rbac";
->>>>>>> c74ce0e (fix: frontend updates)
 
 export const Route = createFileRoute("/auth/login")({
   component: LoginPage,
-  head: () => ({ meta: [{ title: "Login — NurseConnect" }] }),
+  head: () => ({ meta: [{ title: "Login â€” NurseConnect" }] }),
   validateSearch: (s: Record<string, unknown>) => ({
     redirect: typeof s.redirect === "string" ? s.redirect : undefined,
   }),
@@ -39,38 +35,7 @@ function safeRedirect(role: Role, raw: string | undefined): string | null {
   }
 }
 
-<<<<<<< HEAD
-type Persona = "consumer" | "partner" | "admin";
-
-const PERSONA_LABEL: Record<Persona, string> = {
-  consumer: "Consumer / Family",
-  partner:  "Partner / Professional",
-  admin:    "Admin",
-};
-
-const PERSONA_DEFAULT: Record<Persona, Role> = {
-  consumer: "consumer",
-  partner:  "partner",
-  admin:    "super_admin",
-};
-
-const PERSONA_SUBROLES: Record<Persona, Role[]> = {
-  consumer: ["consumer"],
-  partner:  ["partner"],
-  admin:    ["super_admin", "admin"],
-};
-
-// Map frontend role → backend role string
-const ROLE_TO_BACKEND: Record<string, string> = {
-  consumer:   "consumer",
-  partner:    "worker",
-  admin:      "admin_ops",
-  super_admin: "admin_super",
-};
-
-=======
->>>>>>> c74ce0e (fix: frontend updates)
-// Map backend role → frontend role
+// Map backend role â†’ frontend role
 const BACKEND_TO_ROLE: Record<string, Role> = {
   consumer:      "consumer",
   worker:        "partner",
@@ -80,22 +45,7 @@ const BACKEND_TO_ROLE: Record<string, Role> = {
   admin_clinical: "admin",
 };
 
-<<<<<<< HEAD
-// Demo phone numbers per persona
-const DEMO_PHONES: Record<string, string> = {
-  consumer:   "+919999000001",
-  partner:    "+919999000002",
-  super_admin: "+919999000004",
-  admin:      "+919999000003",
-};
-
-async function apiLogin(phone_e164: string, backendRole: string) {
-  const res = await fetch(`${API}/api/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ phone_e164, role: backendRole, code: "123456" }),
-=======
-// Map frontend self-register role → backend role string
+// Map frontend self-register role â†’ backend role string
 const SELF_ROLE_TO_BACKEND: Record<SelfRegisterRole, string> = {
   consumer: "consumer",
   partner:  "worker",
@@ -106,23 +56,16 @@ async function apiRequest(path: string, body: unknown) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
->>>>>>> c74ce0e (fix: frontend updates)
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(
-<<<<<<< HEAD
-      err?.detail?.[0]?.msg ?? err?.detail ?? `Login failed (${res.status})`
-=======
       err?.detail?.[0]?.msg ?? err?.detail ?? `Request failed (${res.status})`
->>>>>>> c74ce0e (fix: frontend updates)
     );
   }
   return res.json();
 }
 
-<<<<<<< HEAD
-=======
 async function apiLogin(email: string, password: string) {
   return apiRequest("/auth/login", { email, password });
 }
@@ -141,14 +84,11 @@ async function apiVerifyEmail(email: string, code: string) {
   return apiRequest("/auth/verify-email", { email, code });
 }
 
->>>>>>> c74ce0e (fix: frontend updates)
 function saveTokens(access: string, refresh: string) {
   localStorage.setItem("access_token", access);
   localStorage.setItem("refresh_token", refresh);
 }
 
-<<<<<<< HEAD
-=======
 function normalizePhone(raw: string): string {
   const p = raw.replace(/\s+/g, "").replace(/-/g, "");
   if (p.startsWith("+")) return p;
@@ -169,29 +109,11 @@ function isPasswordValid(pw: string): boolean {
 
 type Mode = "signin" | "register" | "verify";
 
->>>>>>> c74ce0e (fix: frontend updates)
 function LoginPage() {
   const nav = useNavigate();
   const { signIn, isAuthenticated, user, hydrated } = useAuth();
   const { redirect } = useSearch({ from: "/auth/login" });
 
-<<<<<<< HEAD
-  const [phone, setPhone] = useState("+91 99990 00001");
-  const [persona, setPersona] = useState<Persona>("consumer");
-  const [role, setRole] = useState<Role>(PERSONA_DEFAULT.consumer);
-  const [mode, setMode] = useState<"signin" | "register">("signin");
-  const [name, setName] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  const choosePersona = (p: Persona) => {
-    setPersona(p);
-    setRole(PERSONA_DEFAULT[p]);
-    // Set demo phone for that persona
-    setPhone(DEMO_PHONES[PERSONA_DEFAULT[p]] ?? "+919999000001");
-  };
-
-=======
   const [mode, setMode] = useState<Mode>("signin");
 
   // Sign in
@@ -214,29 +136,11 @@ function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
->>>>>>> c74ce0e (fix: frontend updates)
   if (hydrated && isAuthenticated && user) {
     const target = safeRedirect(user.role, redirect) ?? portalHome(user.role);
     return <Navigate to={target as string} />;
   }
 
-<<<<<<< HEAD
-  const doLogin = async (phone_e164: string, frontendRole: Role, displayName?: string) => {
-    const backendRole = ROLE_TO_BACKEND[frontendRole] ?? "consumer";
-    const data = await apiLogin(phone_e164, backendRole);
-    saveTokens(data.tokens.access_token, data.tokens.refresh_token);
-    const mappedRole = BACKEND_TO_ROLE[data.user.role] ?? "consumer";
-    signIn({
-      id: data.user.id,
-      name: data.user.full_name ?? displayName ?? "User",
-      email: data.user.email ?? `user@nurseconnect.in`,
-      role: mappedRole,
-    });
-    return mappedRole;
-  };
-
-  const submit = async (e: React.FormEvent) => {
-=======
   const switchMode = (m: Mode) => {
     setMode(m);
     setError(null);
@@ -244,25 +148,10 @@ function LoginPage() {
   };
 
   const submitSignIn = async (e: React.FormEvent) => {
->>>>>>> c74ce0e (fix: frontend updates)
     e.preventDefault();
     setError(null);
     setLoading(true);
     try {
-<<<<<<< HEAD
-      // Normalize phone to E.164
-      const raw = phone.replace(/\s+/g, "").replace(/-/g, "");
-      const phone_e164 = raw.startsWith("+") ? raw : `+91${raw.replace(/^0/, "")}`;
-
-      const safeRole: Role =
-        mode === "register" && role !== "consumer" && role !== "partner"
-          ? persona === "partner" ? "partner" : "consumer"
-          : role;
-
-      const mappedRole = await doLogin(phone_e164, safeRole);
-      const target = safeRedirect(mappedRole, redirect) ?? portalHome(mappedRole);
-      setTimeout(() => nav({ to: target as string }), 0);
-=======
       const data = await apiLogin(email, password);
       saveTokens(data.tokens.access_token, data.tokens.refresh_token);
       const mappedRole = BACKEND_TO_ROLE[data.user.role] ?? "consumer";
@@ -274,7 +163,6 @@ function LoginPage() {
       });
       const target = safeRedirect(mappedRole, redirect) ?? portalHome(mappedRole);
       nav({ to: target as string });
->>>>>>> c74ce0e (fix: frontend updates)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {
@@ -282,17 +170,6 @@ function LoginPage() {
     }
   };
 
-<<<<<<< HEAD
-  const quickLogin = async (frontendRole: Role, displayName: string, to: string) => {
-    setError(null);
-    setLoading(true);
-    try {
-      const phone_e164 = DEMO_PHONES[frontendRole] ?? "+919999000001";
-      await doLogin(phone_e164, frontendRole, displayName);
-      setTimeout(() => nav({ to }), 0);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Login failed");
-=======
   const submitRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -329,11 +206,10 @@ function LoginPage() {
       await apiVerifyEmail(verifyEmail, code);
       setEmail(verifyEmail);
       setPassword("");
-      setInfo("Email verified — sign in to continue.");
+      setInfo("Email verified â€” sign in to continue.");
       setMode("signin");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Verification failed");
->>>>>>> c74ce0e (fix: frontend updates)
     } finally {
       setLoading(false);
     }
@@ -375,7 +251,7 @@ function LoginPage() {
             ))}
           </ul>
         </div>
-        <div className="relative text-xs text-sidebar-muted">© 2026 Yantram Healthcare. All rights reserved.</div>
+        <div className="relative text-xs text-sidebar-muted">Â© 2026 Yantram Healthcare. All rights reserved.</div>
       </div>
 
       {/* Form panel */}
@@ -386,120 +262,6 @@ function LoginPage() {
             <div className="text-lg font-semibold">NurseConnect</div>
           </div>
           <div className="nc-card p-8">
-<<<<<<< HEAD
-            <div className="flex items-center gap-1 p-1 rounded-md bg-secondary/60 mb-4 text-[12px] font-medium">
-              {(["signin","register"] as const).map(m => (
-                <button key={m} type="button"
-                  onClick={() => setMode(m)}
-                  className={`flex-1 px-3 py-1.5 rounded-md transition ${mode === m ? "bg-card shadow-sm text-foreground" : "text-muted-foreground"}`}>
-                  {m === "signin" ? "Sign in" : "Register"}
-                </button>
-              ))}
-            </div>
-            <h2 className="text-2xl font-semibold tracking-tight">
-              {mode === "signin" ? "Welcome Back" : "Join the marketplace"}
-            </h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              {mode === "signin"
-                ? "Login to continue to your portal"
-                : "Self-register as a family or care professional"}
-            </p>
-
-            <form className="mt-6 space-y-4" onSubmit={submit}>
-              {mode === "register" && (
-                <div>
-                  <label className="text-[12px] font-medium text-foreground">Full name</label>
-                  <input
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Asha Mehra"
-                    className="mt-1.5 w-full px-3 py-2.5 text-[14px] rounded-md border border-border bg-card focus:outline-none focus:ring-2 focus:ring-ring/40"
-                  />
-                </div>
-              )}
-              <div>
-                <label className="text-[12px] font-medium text-foreground">Mobile Number</label>
-                <input
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="mt-1.5 w-full px-3 py-2.5 text-[14px] rounded-md border border-border bg-card focus:outline-none focus:ring-2 focus:ring-ring/40"
-                />
-              </div>
-              <div>
-                <label className="text-[12px] font-medium text-foreground">
-                  {mode === "signin" ? "Sign in as" : "I am a"}
-                </label>
-                <div className="mt-1.5 grid grid-cols-3 gap-1.5 p-1 rounded-md bg-secondary/60 text-[12px] font-medium">
-                  {(["consumer","partner","admin"] as Persona[]).map(p => (
-                    <button key={p} type="button"
-                      onClick={() => choosePersona(p)}
-                      className={`px-2 py-1.5 rounded-md transition ${persona === p ? "bg-card shadow-sm text-foreground" : "text-muted-foreground"}`}>
-                      {PERSONA_LABEL[p]}
-                    </button>
-                  ))}
-                </div>
-                {mode === "signin" && PERSONA_SUBROLES[persona].length > 1 && (
-                  <select
-                    value={role}
-                    onChange={(e) => setRole(e.target.value as Role)}
-                    className="mt-2 w-full px-3 py-2.5 text-[13px] rounded-md border border-border bg-card focus:outline-none focus:ring-2 focus:ring-ring/40"
-                  >
-                    {PERSONA_SUBROLES[persona].map(rid => {
-                      const meta = ROLES.find(r => r.id === rid);
-                      return <option key={rid} value={rid}>{meta?.label ?? rid} — {meta?.description ?? ""}</option>;
-                    })}
-                  </select>
-                )}
-                {mode === "register" && persona !== "consumer" && (
-                  <p className="mt-1.5 text-[11px] text-muted-foreground">
-                    Partner accounts register as care professionals. Admin variants are provisioned by operations.
-                  </p>
-                )}
-              </div>
-
-              {error && (
-                <div className="text-[13px] text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
-                  {error}
-                </div>
-              )}
-
-              <button
-                disabled={loading}
-                className="w-full inline-flex items-center justify-center gap-2 bg-primary text-primary-foreground py-2.5 rounded-md font-medium hover:opacity-95 disabled:opacity-60 transition"
-              >
-                {loading ? "Logging in…" : mode === "signin" ? "Login" : "Create account"}
-                <ArrowRight className="h-4 w-4" />
-              </button>
-            </form>
-
-            <div className="mt-6 text-[13px] text-muted-foreground text-center">
-              {mode === "signin"
-                ? <>Don't have an account? <button type="button" onClick={() => setMode("register")} className="text-primary font-medium">Register</button></>
-                : <>Already registered? <button type="button" onClick={() => setMode("signin")} className="text-primary font-medium">Sign in</button></>}
-            </div>
-
-            {/* Quick-access demo shortcuts */}
-            <div className="mt-6 grid grid-cols-3 gap-2 pt-4 border-t border-border">
-              {([
-                { label: "Family →",  role: "consumer"    as Role, name: "Aanya Sharma",      to: "/consumer"  },
-                { label: "Partner →", role: "partner"     as Role, name: "Nurse Riya Kapoor", to: "/partner"   },
-                { label: "Admin →",   role: "super_admin" as Role, name: "Admin Super",       to: "/dashboard" },
-              ]).map(({ label, role: r, name: n, to }) => (
-                <button
-                  key={label}
-                  type="button"
-                  disabled={loading}
-                  onClick={() => quickLogin(r, n, to)}
-                  className="text-[12px] text-center px-2 py-2 rounded-md border border-border hover:bg-secondary disabled:opacity-60 transition"
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <p className="mt-2 text-center text-[11px] text-muted-foreground">
-              Demo shortcuts use seed accounts (OTP: 123456)
-            </p>
-=======
             {mode !== "verify" && (
               <div className="flex items-center gap-1 p-1 rounded-md bg-secondary/60 mb-4 text-[12px] font-medium">
                 {(["signin", "register"] as const).map((m) => (
@@ -538,7 +300,7 @@ function LoginPage() {
                       type="password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      placeholder="••••••••"
+                      placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
                       autoComplete="current-password"
                       className="mt-1.5 w-full px-3 py-2.5 text-[14px] rounded-md border border-border bg-card focus:outline-none focus:ring-2 focus:ring-ring/40"
                     />
@@ -559,7 +321,7 @@ function LoginPage() {
                     disabled={loading}
                     className="w-full inline-flex items-center justify-center gap-2 bg-primary text-primary-foreground py-2.5 rounded-md font-medium hover:opacity-95 disabled:opacity-60 transition"
                   >
-                    {loading ? "Logging in…" : "Login"}
+                    {loading ? "Logging inâ€¦" : "Login"}
                     <ArrowRight className="h-4 w-4" />
                   </button>
                 </form>
@@ -614,7 +376,7 @@ function LoginPage() {
                       type="password"
                       value={regPassword}
                       onChange={(e) => setRegPassword(e.target.value)}
-                      placeholder="••••••••"
+                      placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
                       autoComplete="new-password"
                       className="mt-1.5 w-full px-3 py-2.5 text-[14px] rounded-md border border-border bg-card focus:outline-none focus:ring-2 focus:ring-ring/40"
                     />
@@ -649,7 +411,7 @@ function LoginPage() {
                     disabled={loading}
                     className="w-full inline-flex items-center justify-center gap-2 bg-primary text-primary-foreground py-2.5 rounded-md font-medium hover:opacity-95 disabled:opacity-60 transition"
                   >
-                    {loading ? "Creating account…" : "Create account"}
+                    {loading ? "Creating accountâ€¦" : "Create account"}
                     <ArrowRight className="h-4 w-4" />
                   </button>
                 </form>
@@ -703,7 +465,7 @@ function LoginPage() {
                     disabled={loading}
                     className="w-full inline-flex items-center justify-center gap-2 bg-primary text-primary-foreground py-2.5 rounded-md font-medium hover:opacity-95 disabled:opacity-60 transition"
                   >
-                    {loading ? "Verifying…" : "Verify email"}
+                    {loading ? "Verifyingâ€¦" : "Verify email"}
                     <ArrowRight className="h-4 w-4" />
                   </button>
                 </form>
@@ -716,7 +478,6 @@ function LoginPage() {
                 </div>
               </>
             )}
->>>>>>> c74ce0e (fix: frontend updates)
           </div>
         </div>
       </div>
