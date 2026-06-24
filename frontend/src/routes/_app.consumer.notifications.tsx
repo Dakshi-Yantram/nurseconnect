@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useMemo } from "react";
 import { Card } from "@/components/shared/Card";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { SeverityBadge } from "@/components/shared/SeverityBadge";
@@ -16,6 +17,47 @@ function ConsumerNotifications() {
   const incidents = useIncidents().slice(0, 4);
   const bookings = useBookings();
 
+  const bookingPriority: Record<string, number> = {
+    escalated: 0,
+    active: 1,
+    in_progress: 2,
+    claimed: 3,
+    pending_payment: 4,
+    pending: 5,
+    completed: 6,
+  };
+
+  const bookingByPatientId = useMemo(() => {
+    const map = new Map<string, string>();
+    bookings.forEach((booking) => {
+      if (booking.patientId && !map.has(booking.patientId)) {
+        map.set(booking.patientId, booking.id);
+      }
+    });
+    return map;
+  }, [bookings]);
+
+  const resolveBookingIdForIncident = (incident: (typeof incidents)[number]) => {
+    if ((incident as any).bookingId) return String((incident as any).bookingId);
+
+    if (incident.patientId) {
+      const byPatientId = bookings
+        .filter((booking) => booking.patientId === incident.patientId)
+        .sort((a, b) => (bookingPriority[a.rawStatus] ?? 99) - (bookingPriority[b.rawStatus] ?? 99))[0];
+      if (byPatientId) return byPatientId.id;
+
+      const mapped = bookingByPatientId.get(incident.patientId);
+      if (mapped) return mapped;
+    }
+
+    const patientName = incident.title.split("—").pop()?.trim();
+    if (!patientName) return undefined;
+
+    return bookings.find(
+      (booking) => booking.patientName.toLowerCase() === patientName.toLowerCase(),
+    )?.id;
+  };
+
   return (
     <div className="space-y-6">
 
@@ -29,25 +71,43 @@ function ConsumerNotifications() {
             <EmptyState icon={Bell} title="No active alerts" description="Clinical alerts for your patients will appear here." />
           </div>
         ) : (
-          incidents.map(i => (
-            <Link
-              key={i.id}
-              to="/consumer/bookings"
-              className="flex items-center gap-3 px-4 py-3 border-b border-border last:border-0 hover:bg-muted/30"
-            >
-              <div className="min-w-0 flex-1">
-                <div className="text-[13px] font-medium truncate">{i.title}</div>
-                <div className="text-[11.5px] text-muted-foreground truncate">
-                  {i.id} · reporter {i.reporter}
+          incidents.map(i => {
+            const bookingId = resolveBookingIdForIncident(i);
+            const row = (
+              <>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[13px] font-medium truncate">{i.title}</div>
+                  <div className="text-[11.5px] text-muted-foreground truncate">
+                    {i.id} · reporter {i.reporter}
+                  </div>
                 </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <SeverityBadge severity={i.severity} />
+                  <StatusBadge workflow="incident" state={bindStatus("incident", i.rawStatus)} />
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                </div>
+              </>
+            );
+
+            return bookingId ? (
+              <Link
+                key={i.id}
+                to="/consumer/bookings/$bookingId"
+                params={{ bookingId }}
+                className="flex items-center gap-3 px-4 py-3 border-b border-border last:border-0 hover:bg-muted/30"
+              >
+                {row}
+              </Link>
+            ) : (
+              <div
+                key={i.id}
+                className="flex items-center gap-3 px-4 py-3 border-b border-border last:border-0 opacity-70"
+                title="No linked booking found for this alert"
+              >
+                {row}
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <SeverityBadge severity={i.severity} />
-                <StatusBadge workflow="incident" state={bindStatus("incident", i.rawStatus)} />
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
-              </div>
-            </Link>
-          ))
+            );
+          })
         )}
       </Card>
 

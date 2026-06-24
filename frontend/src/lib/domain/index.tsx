@@ -1,5 +1,5 @@
 ﻿/**
- * Shared Domain Context â€” Backend-connected version v2.
+ * Shared Domain Context — Backend-connected version v2.
  * Fetches real data from the NurseConnect API, falls back to mock data
  * if the API is unavailable.
  */
@@ -80,6 +80,22 @@ export interface ServiceEntity {
   basePrice?: number;
 }
 
+// ---------------------------------------------------------------- Patient create payload
+// Mirrors backend PatientCreate (app/schemas/schemas.py) exactly.
+export interface PatientCreatePayload {
+  full_name: string;
+  date_of_birth?: string | null; // "YYYY-MM-DD"
+  gender?: "male" | "female" | "other" | null;
+  relationship_to_consumer?: string | null;
+  blood_group?: string | null;
+  medical_conditions?: string[] | null;
+  allergies?: string[] | null;
+  current_medications?: Record<string, any>[] | null;
+  abha_id?: string | null;
+  is_minor?: boolean;
+  notes?: string | null;
+}
+
 // ---------------------------------------------------------------- Context
 interface DomainState {
   bookings: BookingEntity[];
@@ -100,21 +116,22 @@ interface DomainState {
   getConsentsForPatientId: (patientId: string) => ConsentEntity[];
   getIncidentsForPatientId: (patientId: string) => IncidentEntity[];
   refetchBookings: () => Promise<void>;
+  createPatient: (payload: PatientCreatePayload) => Promise<Patient>;
 }
 
 const DomainCtx = createContext<DomainState | null>(null);
 
-// â”€â”€ Map API booking â†’ BookingEntity â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Map API booking → BookingEntity ─────────────────────────────────────
 function mapBooking(
   b: any,
   patientMap: Map<string, string>,
   serviceMap: Map<string, string>,
 ): BookingEntity {
-  const patientName = patientMap.get(b.patient_id) ?? "â€”";
+  const patientName = patientMap.get(b.patient_id) ?? "—";
   const service = serviceMap.get(b.service_id) ?? b.service_code ?? "Service";
   const area = b.address_snapshot
     ? [b.address_snapshot.line1, b.address_snapshot.city].filter(Boolean).join(", ")
-    : "â€”";
+    : "—";
   const startedAt = b.scheduled_date && b.scheduled_start_time
     ? `${b.scheduled_date} ${b.scheduled_start_time.slice(0, 5)}`
     : b.created_at ?? "";
@@ -127,30 +144,30 @@ function mapBooking(
     service,
     area,
     startedAt,
-    duration: b.scheduled_duration_minutes ? `${b.scheduled_duration_minutes} mins` : "â€”",
+    duration: b.scheduled_duration_minutes ? `${b.scheduled_duration_minutes} mins` : "—",
     rawStatus: b.status ?? "pending",
   };
 }
 
-// â”€â”€ Map API patient â†’ Patient â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Map API patient → Patient ───────────────────────────────────────────
 function mapPatient(p: any): Patient {
   return {
     id: p.id ?? "",
-    name: p.full_name ?? p.name ?? "â€”",
+    name: p.full_name ?? p.name ?? "—",
     age: p.age ?? (p.date_of_birth ? new Date().getFullYear() - new Date(p.date_of_birth).getFullYear() : 0),
     gender: p.gender === "female" ? "F" : "M",
-    phone: p.phone_e164 ?? p.phone ?? "â€”",
-    city: p.city ?? "â€”",
-    plan: p.care_plan ?? p.relationship_to_consumer ?? "â€”",
+    phone: p.phone_e164 ?? p.phone ?? "—",
+    city: p.city ?? "—",
+    plan: p.care_plan ?? p.relationship_to_consumer ?? "—",
     status: "Active",
     bpl: p.bpl ?? false,
-    spent: "â‚¹0",
-    lastVisit: "â€”",
+    spent: "₹0",
+    lastVisit: "—",
     ownerId: p.consumer_id ?? undefined,
   };
 }
 
-// â”€â”€ Map API service â†’ ServiceEntity â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Map API service → ServiceEntity ─────────────────────────────────────
 function mapService(s: any): ServiceEntity {
   return {
     id: s.id ?? "",
@@ -160,7 +177,7 @@ function mapService(s: any): ServiceEntity {
   };
 }
 
-// â”€â”€ Build mock fallback data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Build mock fallback data ────────────────────────────────────────────
 function buildMockData() {
   const bookings: BookingEntity[] = ACTIVE_VISITS.map(v => ({
     id: v.id,
@@ -180,7 +197,7 @@ function buildMockData() {
     ...CLINICAL_CASES.map(c => ({
       id: c.id,
       patientId: resolvePatientIdByName(c.patient),
-      title: `${c.issue} â€” ${c.patient}`,
+      title: `${c.issue} — ${c.patient}`,
       severity: c.severity as IncidentEntity["severity"],
       rawStatus: "open", reporter: c.nurse, assigned: "Clinical Desk",
       createdAt: c.raised,
@@ -217,7 +234,7 @@ export function DomainProvider({ children }: { children: ReactNode }) {
 
   async function load() {
     const token = localStorage.getItem("access_token");
-    console.log("ðŸ”‘ Token:", token ? "present" : "MISSING");
+    console.log("Token:", token ? "present" : "MISSING");
     if (!token) { setLoading(false); return; }
 
     try {
@@ -230,8 +247,8 @@ export function DomainProvider({ children }: { children: ReactNode }) {
         apiFetch("/api/services"),
         apiFetch("/api/care-packages"),
       ]);
-      console.log("ðŸ“¦ patients:", patientsRes);
-      console.log("ðŸ›  services:", servicesRes);
+      console.log("patients:", patientsRes);
+      console.log("services:", servicesRes);
 
       // Build lookup maps for patient & service names
       const patientMap = new Map<string, string>();
@@ -241,7 +258,7 @@ export function DomainProvider({ children }: { children: ReactNode }) {
         const list = Array.isArray(patientsRes.value)
           ? patientsRes.value
           : (patientsRes.value?.items ?? []);
-        list.forEach((p: any) => patientMap.set(p.id, p.full_name ?? p.name ?? "â€”"));
+        list.forEach((p: any) => patientMap.set(p.id, p.full_name ?? p.name ?? "—"));
       }
 
       if (servicesRes.status === "fulfilled") {
@@ -307,6 +324,21 @@ export function DomainProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  // Creates a patient via POST /api/patients, then refreshes the patient
+  // list from the server so the new record (with its real ID) is reflected
+  // everywhere immediately (Patients page, booking form dropdown, etc).
+  async function createPatient(payload: PatientCreatePayload): Promise<Patient> {
+    const created = await apiFetch("/api/patients", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    const mapped = mapPatient(created);
+
+    setData(prev => ({ ...prev, patients: [mapped, ...prev.patients] }));
+
+    return mapped;
+  }
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -339,6 +371,7 @@ export function DomainProvider({ children }: { children: ReactNode }) {
         });
       },
       refetchBookings: load,
+      createPatient,
     };
   }, [data, loading]);
 
@@ -371,7 +404,7 @@ export const useConsumerPatients = (ownerId: string | null | undefined) => {
   return useMemo(() => {
     if (!ownerId) return all;
     const filtered = all.filter(p => (p as any).ownerId === ownerId);
-    return filtered.length > 0 ? filtered : all; // â† add this fallback
+    return filtered.length > 0 ? filtered : all; // ← add this fallback
   }, [all, ownerId]);
 };
 export const useBooking = (id: string) => useDomainCtx().getBooking(id);
@@ -392,6 +425,9 @@ export const usePatientIncidentsById = (id: string | null | undefined): Incident
   const ctx = useDomainCtx();
   return id ? ctx.getIncidentsForPatientId(id) : [];
 };
+
+// New hook: exposes the create-patient mutation to components.
+export const useCreatePatient = () => useDomainCtx().createPatient;
 
 export function useDomainSummary() {
   const d = useDomainCtx();
