@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     EMAIL_VERIFICATION_EXPIRE_MINUTES: int = 15
     EMAIL_DEV_MODE: bool = True
     EMAIL_DEV_FIXED_CODE: str = "654321"
+
+    # Legacy SMTP settings — kept for reference / fallback. Render's free
+    # tier blocks outbound SMTP ports (25/465/587), so these are unused
+    # by email_service.py now in favour of the Resend HTTP API below.
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587
     SMTP_USERNAME: str = ""
@@ -46,6 +50,10 @@ class Settings(BaseSettings):
     SMTP_FROM_EMAIL: str = "no-reply@nurseconnect.app"
     SMTP_FROM_NAME: str = "NurseConnect"
     SMTP_USE_TLS: bool = True
+
+    # Resend (transactional email over HTTPS — works on Render free tier)
+    RESEND_API_KEY: str = ""
+    EMAIL_FROM_ADDRESS: str = "onboarding@resend.dev"
 
     # Razorpay
     RAZORPAY_KEY_ID: str = ""

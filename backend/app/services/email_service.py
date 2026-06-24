@@ -1,30 +1,49 @@
-import asyncio
 import logging
-import smtplib
-from email.message import EmailMessage
-from email.utils import formataddr
+
+import resend
+
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-def _send_message(message: EmailMessage) -> None:
-    with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15) as smtp:
-        if settings.SMTP_USE_TLS:
-            smtp.starttls()
-        if settings.SMTP_USERNAME:
-            smtp.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
-        smtp.send_message(message)
 
 async def send_verification_email(email: str, code: str) -> None:
-    if settings.EMAIL_DEV_MODE or not settings.SMTP_HOST:
+    """Send a verification code to the user's email.
+
+    Uses Resend's HTTPS API rather than raw SMTP sockets — Render's free
+    tier blocks outbound connections on SMTP ports (25/465/587), so a
+    direct smtplib connection always fails with
+    `OSError: [Errno 101] Network is unreachable`. Resend sends over
+    HTTPS (port 443), which is never blocked.
+    """
+    if settings.EMAIL_DEV_MODE or not settings.RESEND_API_KEY:
         logger.info("DEV email verification email=%s code=%s", email, code)
         return
-    message = EmailMessage()
-    message["Subject"] = "Verify your NurseConnect account"
-    message["From"] = formataddr((settings.SMTP_FROM_NAME, settings.SMTP_FROM_EMAIL))
-    message["To"] = email
-    message.set_content(
+
+    resend.api_key = settings.RESEND_API_KEY
+
+    subject = "Verify your NurseConnect account"
+    text_body = (
         f"Your verification code is: {code}\n\n"
         f"This code expires in {settings.EMAIL_VERIFICATION_EXPIRE_MINUTES} minutes."
     )
-    await asyncio.to_thread(_send_message, message)
+    html_body = (
+        f"<p>Your verification code is: <strong>{code}</strong></p>"
+        f"<p>This code expires in {settings.EMAIL_VERIFICATION_EXPIRE_MINUTES} minutes.</p>"
+    )
+
+    try:
+        resend.Emails.send(
+            {
+                "from": f"{settings.SMTP_FROM_NAME} <{settings.EMAIL_FROM_ADDRESS}>",
+                "to": [email],
+                "subject": subject,
+                "text": text_body,
+                "html": html_body,
+            }
+        )
+    except Exception:
+        # Log the failure but don't crash the registration flow on a
+        # transient email-provider error — the user can still use
+        # "resend verification code" if the email genuinely never arrives.
+        logger.exception("Failed to send verification email to %s via Resend", email)
