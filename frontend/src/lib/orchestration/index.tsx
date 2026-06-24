@@ -58,7 +58,7 @@ function useCtx(): Ctx {
 }
 
 export function useOrchestration() { return useCtx().store; }
-export function useVersionStore()  { return useCtx().versions; }
+export function useVersionStore() { return useCtx().versions; }
 
 /** Shallow array/object equality — prevents render loops when selectors
  *  return freshly-allocated arrays with identical contents. */
@@ -185,14 +185,14 @@ export function useVersionedDoc<T>(key: string, initialPublished?: T) {
     shallowEqual,
   );
   const published = versions.published(key);
-  const draft     = versions.draft(key);
+  const draft = versions.draft(key);
   return {
     versions: snapshot,
     published,
     draft,
     current: draft ?? published,
     saveDraft: (body: T, actor: string) => versions.saveDraft(key, body, actor),
-    publish:   (actor: string)           => versions.publish(key, actor),
+    publish: (actor: string) => versions.publish(key, actor),
   };
 }
 
@@ -213,9 +213,9 @@ export function useWorkerExecutionSnapshot(claimantId: string | null | undefined
   const assignmentQueue = useQueue("assignment");
 
   return useMemo(() => {
-    const active  = mine.filter(r => r.state === "active" || r.state === "in_progress");
+    const active = mine.filter(r => r.state === "active" || r.state === "in_progress");
     const pending = mine.filter(r => r.state === "claimed");
-    const open    = openAll.filter(r => r.state === "pending");
+    const open = openAll.filter(r => r.state === "pending");
     const priorityIndex = new Map(assignmentQueue.map(q => [q.id, q.priority] as const));
     const priorityFor = (id: string) => priorityIndex.get(id);
     return { mine, active, pending, open, assignmentQueue, priorityFor };
@@ -257,8 +257,8 @@ export function useVisitLifecycle(visitId: string | null | undefined) {
     const stage = deriveExecutionStage(rec);
 
     const readiness = [
-      { key: "consent",       label: "Patient consent",     ok: !!d.consentAccepted,       at: d.consentAt },
-      { key: "checklist",     label: "Clinical checklist",  ok: !!d.checklistComplete,     at: d.checklistAt },
+      { key: "consent", label: "Patient consent", ok: !!d.consentAccepted, at: d.consentAt },
+      { key: "checklist", label: "Clinical checklist", ok: !!d.checklistComplete, at: d.checklistAt },
       { key: "documentation", label: "Visit documentation", ok: !!d.documentationComplete, at: d.documentationAt },
     ];
     const met = readiness.filter(r => r.ok).length;
@@ -290,8 +290,8 @@ export function useVisitLifecycle(visitId: string | null | undefined) {
  * for a backed RPC stays a single-hook change.
  */
 export function useModerationSnapshot() {
-  const moderation  = useQueue("moderation");
-  const onboarding  = useQueue("onboarding");
+  const moderation = useQueue("moderation");
+  const onboarding = useQueue("onboarding");
   const slaBreached = useQueue("sla_breached");
   // Phase 8F — lifecycle continuity: recent reviewer decisions over the last
   // 24h, derived from the unified history log. Drives the lifecycle strip on
@@ -315,15 +315,15 @@ export function useModerationSnapshot() {
         }
       }
       if ((e.to === "completed" || e.to === "resolved" || e.to === "cancelled" || e.to === "rejected") &&
-          (!lastDecisionAt || e.ts > lastDecisionAt)) lastDecisionAt = e.ts;
+        (!lastDecisionAt || e.ts > lastDecisionAt)) lastDecisionAt = e.ts;
     }
     return {
       moderation,
       onboarding,
       slaBreached,
       counts: {
-        moderation:  moderation.length,
-        onboarding:  onboarding.length,
+        moderation: moderation.length,
+        onboarding: onboarding.length,
         slaBreached: slaBreached.length,
       },
       lifecycle: {
@@ -356,8 +356,12 @@ export function useConsumerCareSnapshot(ownerId?: string | null) {
     const scoped = ownerId
       ? all.filter(r => (r.data as any)?.ownerId === ownerId)
       : all;
-    const upcoming  = scoped.filter(r => r.state === "pending" || r.state === "claimed");
-    const inCare    = scoped.filter(r => r.state === "active"  || r.state === "in_progress");
+    const upcoming = scoped.filter(r =>
+      r.state === "pending" ||
+      r.state === "claimed" ||
+      r.state === "pending_payment"
+    );
+    const inCare = scoped.filter(r => r.state === "active" || r.state === "in_progress");
     const completed = scoped.filter(r => r.state === "completed");
     const escalated = scoped.filter(r => r.state === "escalated");
 
@@ -388,8 +392,8 @@ export function useConsumerCareSnapshot(ownerId?: string | null) {
       byPatient,
       byPatientId,
       counts: {
-        upcoming:  upcoming.length,
-        inCare:    inCare.length,
+        upcoming: upcoming.length,
+        inCare: inCare.length,
         completed: completed.length,
         escalated: escalated.length,
       },
@@ -420,12 +424,12 @@ export interface AdminInterventionEntry {
 }
 
 export function useAdminOperationsSnapshot() {
-  const assignment   = useQueue("assignment");
-  const escalation   = useQueue("escalation");
-  const moderation   = useQueue("moderation");
-  const dispute      = useQueue("dispute");
-  const slaBreached  = useQueue("sla_breached");
-  const recent       = useStoreSnapshot(s => s.history.recent(200));
+  const assignment = useQueue("assignment");
+  const escalation = useQueue("escalation");
+  const moderation = useQueue("moderation");
+  const dispute = useQueue("dispute");
+  const slaBreached = useQueue("sla_breached");
+  const recent = useStoreSnapshot(s => s.history.recent(200));
 
   return useMemo(() => {
     const since = Date.now() - 24 * 60 * 60 * 1000;
@@ -433,11 +437,11 @@ export function useAdminOperationsSnapshot() {
     const allActionable = [
       ...assignment, ...escalation, ...moderation, ...dispute, ...slaBreached,
     ];
-    const urgentItems   = allActionable.filter(it => it.priority === "urgent");
+    const urgentItems = allActionable.filter(it => it.priority === "urgent");
     const breachedItems = allActionable.filter(it => it.breached);
 
     const dispatchUnclaimed = assignment.filter(it => it.state === "pending").length;
-    const dispatchClaimed   = assignment.filter(it => it.state === "claimed").length;
+    const dispatchClaimed = assignment.filter(it => it.state === "claimed").length;
 
     const activeEscalations = escalation.length;
     let escalationsOpened24h = 0;
@@ -465,9 +469,9 @@ export function useAdminOperationsSnapshot() {
             id: e.id, ts: e.ts, workflow: e.workflow, entityId: e.entityId,
             from: e.from, to: e.to, actor: e.actor, notes: e.notes,
             tone: e.to === "escalated" ? "warning"
-                : e.to === "cancelled" || e.to === "rejected" ? "danger"
+              : e.to === "cancelled" || e.to === "rejected" ? "danger"
                 : e.to === "resolved" || e.to === "completed" ? "success"
-                : "primary",
+                  : "primary",
           });
         }
       }
@@ -488,23 +492,23 @@ export function useAdminOperationsSnapshot() {
     return {
       queues: { assignment, escalation, moderation, dispute, slaBreached },
       counts: {
-        assignment:  assignment.length,
-        escalation:  escalation.length,
-        moderation:  moderation.length,
-        dispute:     dispute.length,
+        assignment: assignment.length,
+        escalation: escalation.length,
+        moderation: moderation.length,
+        dispute: dispute.length,
         slaBreached: slaBreached.length,
-        urgent:      urgentItems.length,
-        breached:    breachedItems.length,
-        actionable:  allActionable.length,
+        urgent: urgentItems.length,
+        breached: breachedItems.length,
+        actionable: allActionable.length,
       },
       dispatch: {
         unclaimed: dispatchUnclaimed,
-        claimed:   dispatchClaimed,
+        claimed: dispatchClaimed,
         decidedRecent: dispatchesDecided24h,
       },
       escalationLifecycle: {
-        active:       activeEscalations,
-        opened24h:    escalationsOpened24h,
+        active: activeEscalations,
+        opened24h: escalationsOpened24h,
         recovered24h: escalationsRecovered24h,
       },
       interventionLifecycle: {

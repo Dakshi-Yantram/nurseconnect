@@ -10,7 +10,7 @@ import {
   resolvePatientIdByName,
   type Patient,
 } from "@/lib/mock-data";
-import { OrchestrationProvider } from "@/lib/orchestration";
+import { OrchestrationProvider, useOrchestration } from "@/lib/orchestration";
 
 const API = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
@@ -227,7 +227,30 @@ function buildMockData() {
 
   return { bookings, visits: bookings, patients: PATIENTS, consents, incidents, packages, services };
 }
-
+function BookingSyncer({ bookings, userId }: { bookings: BookingEntity[]; userId: string | null }) {
+  const store = useOrchestration();
+  useEffect(() => {
+    if (!userId || bookings.length === 0) return;
+    bookings.forEach(b => {
+      store.repos.booking.upsert({
+        id: b.id,
+        workflow: "booking",
+        state: b.rawStatus,
+        enteredAt: b.startedAt ?? new Date().toISOString(),
+        data: {
+          ...b,
+          ownerId: userId,
+          patientName: b.patientName,
+          service: b.service,
+          area: b.area,
+          status: b.rawStatus,
+        },
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookings, userId]);
+  return null;
+}
 export function DomainProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState(buildMockData);
   const [loading, setLoading] = useState(true);
@@ -375,9 +398,14 @@ export function DomainProvider({ children }: { children: ReactNode }) {
     };
   }, [data, loading]);
 
+  const raw = localStorage.getItem("nc.session.v1");
+  const userId = raw ? (() => { try { return JSON.parse(raw)?.id; } catch { return null; } })() : null;
   return (
     <DomainCtx.Provider value={value}>
-      <OrchestrationProvider>{children}</OrchestrationProvider>
+      <OrchestrationProvider>
+        <BookingSyncer bookings={data.bookings} userId={userId} />
+        {children}
+      </OrchestrationProvider>
     </DomainCtx.Provider>
   );
 }
