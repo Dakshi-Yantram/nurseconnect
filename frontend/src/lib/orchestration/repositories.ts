@@ -116,7 +116,7 @@ function seedBookings(): EntityRecord[] {
 
 export function buildRepositories(): Record<WorkflowKey, InMemoryRepository> {
   return {
-    booking:    new InMemoryRepository("booking",    seedBookings()),
+    booking:    new InMemoryRepository("booking",    []),
     complaint:  new InMemoryRepository("complaint",  seedComplaints()),
     dispute:    new InMemoryRepository("dispute",    seedDisputes()),
     incident:   new InMemoryRepository("incident",   seedIncidents()),

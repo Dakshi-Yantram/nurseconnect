@@ -227,10 +227,14 @@ function buildMockData() {
 
   return { bookings, visits: bookings, patients: PATIENTS, consents, incidents, packages, services };
 }
-function BookingSyncer({ bookings, userId }: { bookings: BookingEntity[]; userId: string | null }) {
+function BookingSyncer({ bookings, userId, isReal }: { bookings: BookingEntity[]; userId: string | null; isReal: boolean }) {
   const store = useOrchestration();
   useEffect(() => {
-    if (!userId || bookings.length === 0) return;
+    // Only sync real, backend-sourced bookings into the orchestration store.
+    // Mock fallback data must never be stamped with the live user's ownerId —
+    // doing so was causing other people's seed visits (Meera Joshi, Mrs.
+    // Sharma, etc.) to appear as "belonging to" the logged-in consumer.
+    if (!userId || !isReal || bookings.length === 0) return;
     bookings.forEach(b => {
       store.repos.booking.upsert({
         id: b.id,
@@ -248,12 +252,13 @@ function BookingSyncer({ bookings, userId }: { bookings: BookingEntity[]; userId
       });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bookings, userId]);
+  }, [bookings, userId, isReal]);
   return null;
 }
 export function DomainProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState(buildMockData);
   const [loading, setLoading] = useState(true);
+  const [bookingsAreReal, setBookingsAreReal] = useState(false);
 
   async function load() {
     const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
@@ -299,6 +304,7 @@ export function DomainProvider({ children }: { children: ReactNode }) {
             : (bookingsRes.value?.items ?? [])
           ).map((b: any) => mapBooking(b, patientMap, serviceMap))
           : mock.bookings;
+          setBookingsAreReal(bookingsRes.status === "fulfilled");
 
       // Map patients
       const patients: Patient[] =
@@ -408,7 +414,7 @@ export function DomainProvider({ children }: { children: ReactNode }) {
   return (
     <DomainCtx.Provider value={value}>
       <OrchestrationProvider>
-        <BookingSyncer bookings={data.bookings} userId={userId} />
+        <BookingSyncer bookings={data.bookings} userId={userId} isReal={bookingsAreReal} />
         {children}
       </OrchestrationProvider>
     </DomainCtx.Provider>
