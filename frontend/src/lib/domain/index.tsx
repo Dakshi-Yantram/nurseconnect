@@ -15,7 +15,7 @@ import { OrchestrationProvider, useOrchestration } from "@/lib/orchestration";
 const API = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
 async function apiFetch(path: string, init?: RequestInit) {
-  const token = localStorage.getItem("access_token");
+  const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
   const res = await fetch(`${API}${path}`, {
     ...init,
     headers: {
@@ -256,7 +256,7 @@ export function DomainProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   async function load() {
-    const token = localStorage.getItem("access_token");
+    const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
     console.log("Token:", token ? "present" : "MISSING");
     if (!token) { setLoading(false); return; }
 
@@ -398,8 +398,13 @@ export function DomainProvider({ children }: { children: ReactNode }) {
     };
   }, [data, loading]);
 
-  const raw = localStorage.getItem("nc.session.v1");
-  const userId = raw ? (() => { try { return JSON.parse(raw)?.id; } catch { return null; } })() : null;
+  const [userId, setUserId] = useState<string | null>(null);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("nc.session.v1");
+      setUserId(raw ? JSON.parse(raw)?.id ?? null : null);
+    } catch { setUserId(null); }
+  }, []);
   return (
     <DomainCtx.Provider value={value}>
       <OrchestrationProvider>

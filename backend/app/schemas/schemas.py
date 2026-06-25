@@ -382,6 +382,8 @@ class BookingOut(ORMModel):
     assignment_wave: Optional[int] = None
     assignment_escalated_at: Optional[datetime] = None
     distance_km: Optional[float] = None
+    patient_name: Optional[str] = None
+    service_name: Optional[str] = None
 
 
 class BookingCancelRequest(BaseModel):

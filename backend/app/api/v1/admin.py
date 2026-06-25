@@ -23,6 +23,7 @@ from app.models.models import (
     ConsumerProfile,
     Escalation,
     FinancialLedger,
+    Patient,
     User,
     WorkerDocument,
     WorkerProfile,
@@ -277,3 +278,63 @@ async def rematch_booking(
     b.rematch_count += 1
     await db.commit()
     return {"rematch_initiated": True, "attempt": b.rematch_count}
+@router.get("/patients")
+async def admin_list_patients(
+    current: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not is_admin(current.role):
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    stmt = (
+        select(Patient, ConsumerProfile, User)
+        .join(ConsumerProfile, ConsumerProfile.id == Patient.consumer_id)
+        .join(User, User.id == ConsumerProfile.user_id)
+        .order_by(Patient.created_at.desc())
+    )
+    res = await db.execute(stmt)
+
+    items = []
+    for patient, profile, user in res.all():
+        age = None
+        if patient.date_of_birth:
+            today = date.today()
+            age = today.year - patient.date_of_birth.year - (
+                (today.month, today.day) < (patient.date_of_birth.month, patient.date_of_birth.day)
+            )
+        items.append({
+            "id": str(patient.id),
+            "full_name": patient.full_name,
+            "age": age,
+            "gender": patient.gender.value if patient.gender else None,
+            "phone_e164": user.phone_e164,
+            "city": profile.city,
+            "care_plan": None,
+            "is_bpl": False,
+        })
+    return items
+
+
+@router.get("/consumers")
+async def admin_list_consumers(
+    current: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not is_admin(current.role):
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    stmt = (
+        select(ConsumerProfile, User)
+        .join(User, User.id == ConsumerProfile.user_id)
+        .order_by(User.full_name)
+    )
+    res = await db.execute(stmt)
+
+    return [
+        {
+            "id": str(profile.id),
+            "full_name": user.full_name,
+            "phone": user.phone_e164,
+        }
+        for profile, user in res.all()
+    ]

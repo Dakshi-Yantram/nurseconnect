@@ -40,8 +40,9 @@ export function SchemaForm({
 
   return (
     <form
-      onSubmit={(e) => { e.preventDefault(); setTouched(true); if (errors.length === 0) onSubmit?.(values); }}
+      onSubmit={(e) => { e.preventDefault(); setTouched(true); onSubmit?.(values); }}
       className="space-y-6"
+      suppressHydrationWarning
     >
       <header>
         <h3 className="text-[14px] font-semibold text-foreground">{schema.title}</h3>

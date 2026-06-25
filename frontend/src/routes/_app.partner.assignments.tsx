@@ -1,4 +1,5 @@
-﻿import { createFileRoute, Link } from "@tanstack/react-router";
+﻿import { useWorkerBookingsSync } from "@/lib/orchestration/useWorkerBookingsSync";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { WorkflowActionButton } from "@/components/shared/WorkflowActionButton";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -271,6 +272,7 @@ export const Route = createFileRoute("/_app/partner/assignments")({
 });
 
 function WorkerAssignments() {
+  useWorkerBookingsSync(); 
   const { user } = useAuth();
   const role = (user?.role ?? null) as Role | null;
   const claimantId = user?.id ?? "worker-anon";

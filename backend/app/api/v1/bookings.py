@@ -276,6 +276,12 @@ async def new_requests(profile: WorkerProfile = Depends(get_worker_profile), db:
     out: list[BookingOut] = []
     for b, dist in visible:
         bm = BookingOut.model_validate(b)
+        if b.patient:                        # ← 8 spaces indent
+            bm.patient_name = b.patient.full_name
+        if b.service:
+            bm.service_name = b.service.name
+        elif b.package:
+            bm.service_name = b.package.name
         if dist is not None:
             bm.distance_km = round(dist, 2)
         out.append(bm)

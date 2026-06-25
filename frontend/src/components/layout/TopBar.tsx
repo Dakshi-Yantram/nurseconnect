@@ -1,11 +1,29 @@
+// PATCH for src/components/layout/TopBar.tsx
+//
+// Problem: the notification bell <button> has no onClick handler at all —
+// it's purely decorative. This patch wires it to navigate to the
+// portal-appropriate notifications route, following the same `nav({ to })`
+// pattern already used elsewhere in this file (role switcher).
+//
+// Only the consumer portal currently has a notifications route registered
+// in NAV_REGISTRY (/consumer/notifications). Partner/admin portals don't
+// have one yet, so for those roles we no-op for now rather than navigate
+// to a route that doesn't exist (a 404). When a partner notifications
+// route is added to rbac.ts, just extend NOTIFICATIONS_ROUTE_BY_PORTAL below.
+
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { Bell, Search, ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { Breadcrumbs } from "./Breadcrumbs";
 import { useAuth } from "@/lib/auth-context";
-import { ROLES, portalForRole, portalHome, routeMeta, type Role } from "@/lib/rbac";
+import { ROLES, portalForRole, portalHome, routeMeta, type Role, type Portal } from "@/lib/rbac";
 import { RoleBadge } from "@/components/shared/RoleBadge";
 import { PortalBadge } from "@/components/shared/PortalBadge";
+
+// Add more portals here as their notifications routes are built.
+const NOTIFICATIONS_ROUTE_BY_PORTAL: Partial<Record<Portal, string>> = {
+  consumer: "/consumer/notifications",
+};
 
 export function TopBar() {
   const path = useRouterState({ select: (s) => s.location.pathname });
@@ -14,6 +32,7 @@ export function TopBar() {
   const nav = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const currentPortal = portalForRole(user?.role ?? null);
+  const notificationsRoute = currentPortal ? NOTIFICATIONS_ROUTE_BY_PORTAL[currentPortal] : undefined;
 
   return (
     <header className="sticky top-0 z-20 bg-card/95 backdrop-blur border-b border-border">
@@ -22,7 +41,6 @@ export function TopBar() {
           <Breadcrumbs />
           <h1 className="text-[15px] sm:text-[18px] font-semibold text-foreground leading-tight truncate">{meta.title}</h1>
         </div>
-
 
         <div className="flex items-center gap-2 sm:gap-3">
           <div className="relative hidden lg:block">
@@ -33,11 +51,22 @@ export function TopBar() {
               className="w-[280px] xl:w-[320px] pl-9 pr-3 py-2 text-[13px] rounded-md bg-secondary border border-border focus:outline-none focus:ring-2 focus:ring-ring/40"
             />
           </div>
-          <button aria-label="Notifications" className="relative h-9 w-9 grid place-items-center rounded-md hover:bg-secondary">
+
+          <button
+            type="button"
+            aria-label="Notifications"
+            disabled={!notificationsRoute}
+            onClick={() => {
+              if (notificationsRoute) nav({ to: notificationsRoute });
+            }}
+            className={
+              "relative h-9 w-9 grid place-items-center rounded-md hover:bg-secondary" +
+              (!notificationsRoute ? " opacity-60 cursor-default" : "")
+            }
+          >
             <Bell className="h-[18px] w-[18px] text-muted-foreground" aria-hidden="true" />
             <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-destructive rounded-full" aria-hidden="true" />
           </button>
-
 
           {user && (
             <div className="relative">
@@ -76,7 +105,6 @@ export function TopBar() {
                             const nextRole = r.id as Role;
                             setRole(nextRole);
                             setMenuOpen(false);
-                            // Route to the correct portal home when portal changes.
                             if (portalForRole(nextRole) !== currentPortal) {
                               nav({ to: portalHome(nextRole) });
                             }

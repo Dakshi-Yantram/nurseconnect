@@ -36,7 +36,7 @@ export const CARE_PACKAGE_SCHEMA: FormSchema = {
         showWhen: { field: "live_in", truthy: true }, span: 3 },
     ]},
     { key: "review", title: "Review & activation",
-      visibleToRoles: ["admin_super","admin_clinical","admin_ops"],
+      visibleToRoles: ["admin_super" as any, "admin_clinical" as any, "admin_ops" as any],
       fields: [
         { key: "activation_date", label: "Activation date", kind: "date", validation: { required: true } },
         { key: "reviewer_note",   label: "Reviewer notes",  kind: "textarea", span: 3 },

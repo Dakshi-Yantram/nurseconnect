@@ -39,18 +39,18 @@ function labelFor(a: ActionKey): string {
 
 /** Maps an action to a transition target — kept narrow to common ops. */
 const ACTION_TO_STATE: Partial<Record<ActionKey, string>> = {
-  "worker.claim_assignment":   "claimed",
+  "worker.claim_assignment": "claimed",
   "worker.release_assignment": "pending",
-  "worker.accept_assignment":  "active",
+  "worker.accept_assignment": "active",
   "worker.decline_assignment": "cancelled",
-  "worker.check_in":           "in_progress",
-  "worker.check_out":          "completed",
-  "worker.escalate_visit":     "escalated",
-  "consumer.cancel_booking":   "cancelled",
+  "worker.check_in": "in_progress",
+  "worker.check_out": "completed",
+  "worker.escalate_visit": "escalated",
+  "consumer.cancel_booking": "cancelled",
 };
 
 // ---------------------------------------------------------------- No-op
-const noop = () => {};
+const noop = () => { };
 
 // ---------------------------------------------------------------- Status header
 function JourneyHeader({
@@ -141,7 +141,7 @@ export function VisitExecutionPanel({ visitId, readOnly = false }: { visitId: st
   const state = bindStatus("booking", rec.state);
   const v: any = rec.data;
   const allowed = actionsForState("booking", state).filter(a => can(role, a) && a.startsWith("worker."));
-  const checklistSchema     = getChecklistForBooking(v);
+  const checklistSchema = getChecklistForBooking(v);
   const documentationSchema = getDocumentationForBooking(v);
 
   const move = (action: ActionKey, to: string, message: string) => {
@@ -154,10 +154,10 @@ export function VisitExecutionPanel({ visitId, readOnly = false }: { visitId: st
     store.patchEntity("booking", rec.id, patch, actor, role, notes);
   };
 
-  const consentOk            = !!v.consentAccepted;
-  const checklistComplete    = !!v.checklistComplete;
-  const documentationDone    = !!v.documentationComplete;
-  const stage                = lifecycle.stage ?? deriveExecutionStage(rec);
+  const consentOk = !!v.consentAccepted;
+  const checklistComplete = !!v.checklistComplete;
+  const documentationDone = !!v.documentationComplete;
+  const stage = lifecycle.stage ?? deriveExecutionStage(rec);
 
   const checklistEmphasis = stage.key === "checklist_pending"
     ? "ring-1 ring-amber-300/70 shadow-[0_0_0_3px_rgba(251,191,36,0.08)]" : "";
@@ -240,7 +240,7 @@ export function VisitExecutionPanel({ visitId, readOnly = false }: { visitId: st
 
         {/* Readiness flags */}
         <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2 text-[12px]">
-          <ReadinessFlag ok={consentOk}         label="Patient consent" />
+          <ReadinessFlag ok={consentOk} label="Patient consent" />
           <ReadinessFlag ok={checklistComplete} label="Clinical checklist" />
           <ReadinessFlag ok={documentationDone} label="Visit documentation" />
         </div>
@@ -278,12 +278,26 @@ export function VisitExecutionPanel({ visitId, readOnly = false }: { visitId: st
             <SchemaForm
               schema={checklistSchema}
               submitLabel="Save checklist"
-              disabled={readOnly}
+              readonly={readOnly}
               onSubmit={readOnly ? noop : () => patchData(
                 { checklistComplete: true, checklistAt: new Date().toISOString() },
                 `Clinical checklist submitted (${checklistSchema.key})`,
               )}
             />
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={() => {
+                  patchData(
+                    { checklistComplete: true, checklistAt: new Date().toISOString() },
+                    `Clinical checklist submitted (${checklistSchema.key})`,
+                  );
+                }}
+                className="mt-2 w-full rounded-md bg-primary text-primary-foreground px-3 py-2 text-[13px] font-medium hover:opacity-95"
+              >
+                Save checklist ✓
+              </button>
+            )}
           </RuntimeBoundary>
         </Card>
       </div>
@@ -298,7 +312,7 @@ export function VisitExecutionPanel({ visitId, readOnly = false }: { visitId: st
             <SchemaForm
               schema={documentationSchema}
               submitLabel="Submit documentation"
-              disabled={readOnly}
+              readonly={readOnly}
               onSubmit={readOnly ? noop : () => patchData(
                 { documentationComplete: true, documentationAt: new Date().toISOString() },
                 "Visit documentation submitted",
@@ -317,7 +331,7 @@ function ReadinessFlag({ ok, label }: { ok: boolean; label: string }) {
   return (
     <div className={"flex items-center gap-1.5 rounded-md border px-2 py-1.5 "
       + (ok ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-700 dark:text-emerald-400"
-            : "border-border bg-muted/30 text-muted-foreground")}>
+        : "border-border bg-muted/30 text-muted-foreground")}>
       <CheckCircle2 className="h-3.5 w-3.5" /> {label}{ok ? " · ready" : " · pending"}
     </div>
   );
