@@ -178,14 +178,11 @@ function mapService(s: any): ServiceEntity {
 }
 
 // ── Build mock fallback data ────────────────────────────────────────────
+// NOTE: bookings are intentionally NOT included in this fallback bundle.
+// Mock visits (Meera Joshi, Mrs. Sharma, etc.) belong to nobody real — if
+// the bookings API fails, the correct behavior is an honest empty state,
+// not someone else's demo data attributed to the logged-in consumer.
 function buildMockData() {
-  const bookings: BookingEntity[] = ACTIVE_VISITS.map(v => ({
-    id: v.id,
-    patientId: resolvePatientIdByName(v.patient),
-    patientName: v.patient, nurseName: v.nurse ?? "", service: v.service,
-    area: v.area, startedAt: v.started, duration: v.duration, rawStatus: v.status,
-  }));
-
   const consents: ConsentEntity[] = CONSENTS.map(c => ({
     id: c.id,
     patientId: resolvePatientIdByName(c.patient),
@@ -225,16 +222,17 @@ function buildMockData() {
     { id: "SVC-105", name: "IV Therapy" },
   ];
 
-  return { bookings, visits: bookings, patients: PATIENTS, consents, incidents, packages, services };
+  // bookings/visits deliberately empty — see note above.
+  return { bookings: [] as BookingEntity[], visits: [] as VisitEntity[], patients: PATIENTS, consents, incidents, packages, services };
 }
-function BookingSyncer({ bookings, userId, isReal }: { bookings: BookingEntity[]; userId: string | null; isReal: boolean }) {
+
+function BookingSyncer({ bookings, userId }: { bookings: BookingEntity[]; userId: string | null }) {
   const store = useOrchestration();
   useEffect(() => {
-    // Only sync real, backend-sourced bookings into the orchestration store.
-    // Mock fallback data must never be stamped with the live user's ownerId —
-    // doing so was causing other people's seed visits (Meera Joshi, Mrs.
-    // Sharma, etc.) to appear as "belonging to" the logged-in consumer.
-    if (!userId || !isReal || bookings.length === 0) return;
+    // Only ever syncs whatever is in `bookings` — and `bookings` is only
+    // ever populated from a successful API response (see load() below).
+    // Mock/demo visits never reach this component, for any user.
+    if (!userId || bookings.length === 0) return;
     bookings.forEach(b => {
       store.repos.booking.upsert({
         id: b.id,
@@ -252,13 +250,13 @@ function BookingSyncer({ bookings, userId, isReal }: { bookings: BookingEntity[]
       });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bookings, userId, isReal]);
+  }, [bookings, userId]);
   return null;
 }
+
 export function DomainProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState(buildMockData);
   const [loading, setLoading] = useState(true);
-  const [bookingsAreReal, setBookingsAreReal] = useState(false);
 
   async function load() {
     const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
@@ -296,15 +294,23 @@ export function DomainProvider({ children }: { children: ReactNode }) {
         list.forEach((s: any) => serviceMap.set(s.id, s.name ?? s.service_code ?? "Service"));
       }
 
-      // Map bookings with resolved names
+      // Map bookings with resolved names.
+      // IMPORTANT: never fall back to mock bookings here. Mock visits
+      // (Meera Joshi, Mrs. Sharma, etc.) belong to nobody real — showing
+      // them to a logged-in consumer when the API fails is worse than an
+      // honest empty state. This applies to every user, not just one
+      // account — there is no per-user special-casing here.
       const bookings: BookingEntity[] =
         bookingsRes.status === "fulfilled"
           ? (Array.isArray(bookingsRes.value)
             ? bookingsRes.value
             : (bookingsRes.value?.items ?? [])
           ).map((b: any) => mapBooking(b, patientMap, serviceMap))
-          : mock.bookings;
-          setBookingsAreReal(bookingsRes.status === "fulfilled");
+          : [];
+
+      if (bookingsRes.status !== "fulfilled") {
+        console.warn("Bookings API failed — showing empty state instead of mock data:", bookingsRes.reason);
+      }
 
       // Map patients
       const patients: Patient[] =
@@ -347,7 +353,10 @@ export function DomainProvider({ children }: { children: ReactNode }) {
         services,
       });
     } catch (e) {
-      console.warn("Domain API load failed, using mock data:", e);
+      console.warn("Domain API load failed:", e);
+      // Even on a hard failure, keep bookings/visits empty rather than
+      // silently swapping in demo data for a real, logged-in user.
+      setData(prev => ({ ...prev, bookings: [], visits: [] }));
     } finally {
       setLoading(false);
     }
@@ -414,7 +423,7 @@ export function DomainProvider({ children }: { children: ReactNode }) {
   return (
     <DomainCtx.Provider value={value}>
       <OrchestrationProvider>
-        <BookingSyncer bookings={data.bookings} userId={userId} isReal={bookingsAreReal} />
+        <BookingSyncer bookings={data.bookings} userId={userId} />
         {children}
       </OrchestrationProvider>
     </DomainCtx.Provider>
