@@ -13,6 +13,6 @@
     "#tanstack-start-entry": "./src/start.ts"
   },
   "vars": {
-    "VITE_API_URL": "http://nurseconnect-backend-env.eba-2kgt5kec.ap-south-1.elasticbeanstalk.com"
+   "VITE_API_URL": "https://d1km44yxgw1fc.cloudfront.net"
   }
 }
