@@ -51,6 +51,7 @@ import { Route as AppUsersNursesRouteImport } from './routes/_app.users.nurses'
 import { Route as AppPatientsPatientIdRouteImport } from './routes/_app.patients.$patientId'
 import { Route as AppPartnerVisitsRouteImport } from './routes/_app.partner.visits'
 import { Route as AppPartnerTrainingRouteImport } from './routes/_app.partner.training'
+import { Route as AppPartnerNotificationsRouteImport } from './routes/_app.partner.notifications'
 import { Route as AppPartnerEarningsRouteImport } from './routes/_app.partner.earnings'
 import { Route as AppPartnerDocumentationRouteImport } from './routes/_app.partner.documentation'
 import { Route as AppPartnerAvailabilityRouteImport } from './routes/_app.partner.availability'
@@ -295,6 +296,11 @@ const AppPartnerTrainingRoute = AppPartnerTrainingRouteImport.update({
   path: '/training',
   getParentRoute: () => AppPartnerRoute,
 } as any)
+const AppPartnerNotificationsRoute = AppPartnerNotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
+  getParentRoute: () => AppPartnerRoute,
+} as any)
 const AppPartnerEarningsRoute = AppPartnerEarningsRouteImport.update({
   id: '/earnings',
   path: '/earnings',
@@ -518,6 +524,7 @@ export interface FileRoutesByFullPath {
   '/partner/availability': typeof AppPartnerAvailabilityRoute
   '/partner/documentation': typeof AppPartnerDocumentationRoute
   '/partner/earnings': typeof AppPartnerEarningsRoute
+  '/partner/notifications': typeof AppPartnerNotificationsRoute
   '/partner/training': typeof AppPartnerTrainingRoute
   '/partner/visits': typeof AppPartnerVisitsRouteWithChildren
   '/patients/$patientId': typeof AppPatientsPatientIdRoute
@@ -590,6 +597,7 @@ export interface FileRoutesByTo {
   '/partner/availability': typeof AppPartnerAvailabilityRoute
   '/partner/documentation': typeof AppPartnerDocumentationRoute
   '/partner/earnings': typeof AppPartnerEarningsRoute
+  '/partner/notifications': typeof AppPartnerNotificationsRoute
   '/partner/training': typeof AppPartnerTrainingRoute
   '/patients/$patientId': typeof AppPatientsPatientIdRoute
   '/users/nurses': typeof AppUsersNursesRoute
@@ -665,6 +673,7 @@ export interface FileRoutesById {
   '/_app/partner/availability': typeof AppPartnerAvailabilityRoute
   '/_app/partner/documentation': typeof AppPartnerDocumentationRoute
   '/_app/partner/earnings': typeof AppPartnerEarningsRoute
+  '/_app/partner/notifications': typeof AppPartnerNotificationsRoute
   '/_app/partner/training': typeof AppPartnerTrainingRoute
   '/_app/partner/visits': typeof AppPartnerVisitsRouteWithChildren
   '/_app/patients/$patientId': typeof AppPatientsPatientIdRoute
@@ -742,6 +751,7 @@ export interface FileRouteTypes {
     | '/partner/availability'
     | '/partner/documentation'
     | '/partner/earnings'
+    | '/partner/notifications'
     | '/partner/training'
     | '/partner/visits'
     | '/patients/$patientId'
@@ -814,6 +824,7 @@ export interface FileRouteTypes {
     | '/partner/availability'
     | '/partner/documentation'
     | '/partner/earnings'
+    | '/partner/notifications'
     | '/partner/training'
     | '/patients/$patientId'
     | '/users/nurses'
@@ -888,6 +899,7 @@ export interface FileRouteTypes {
     | '/_app/partner/availability'
     | '/_app/partner/documentation'
     | '/_app/partner/earnings'
+    | '/_app/partner/notifications'
     | '/_app/partner/training'
     | '/_app/partner/visits'
     | '/_app/patients/$patientId'
@@ -1215,6 +1227,13 @@ declare module '@tanstack/react-router' {
       path: '/training'
       fullPath: '/partner/training'
       preLoaderRoute: typeof AppPartnerTrainingRouteImport
+      parentRoute: typeof AppPartnerRoute
+    }
+    '/_app/partner/notifications': {
+      id: '/_app/partner/notifications'
+      path: '/notifications'
+      fullPath: '/partner/notifications'
+      preLoaderRoute: typeof AppPartnerNotificationsRouteImport
       parentRoute: typeof AppPartnerRoute
     }
     '/_app/partner/earnings': {
@@ -1646,6 +1665,7 @@ interface AppPartnerRouteChildren {
   AppPartnerAvailabilityRoute: typeof AppPartnerAvailabilityRoute
   AppPartnerDocumentationRoute: typeof AppPartnerDocumentationRoute
   AppPartnerEarningsRoute: typeof AppPartnerEarningsRoute
+  AppPartnerNotificationsRoute: typeof AppPartnerNotificationsRoute
   AppPartnerTrainingRoute: typeof AppPartnerTrainingRoute
   AppPartnerVisitsRoute: typeof AppPartnerVisitsRouteWithChildren
   AppPartnerIndexRoute: typeof AppPartnerIndexRoute
@@ -1656,6 +1676,7 @@ const AppPartnerRouteChildren: AppPartnerRouteChildren = {
   AppPartnerAvailabilityRoute: AppPartnerAvailabilityRoute,
   AppPartnerDocumentationRoute: AppPartnerDocumentationRoute,
   AppPartnerEarningsRoute: AppPartnerEarningsRoute,
+  AppPartnerNotificationsRoute: AppPartnerNotificationsRoute,
   AppPartnerTrainingRoute: AppPartnerTrainingRoute,
   AppPartnerVisitsRoute: AppPartnerVisitsRouteWithChildren,
   AppPartnerIndexRoute: AppPartnerIndexRoute,

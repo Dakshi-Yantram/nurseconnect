@@ -23,6 +23,7 @@ import { PortalBadge } from "@/components/shared/PortalBadge";
 // Add more portals here as their notifications routes are built.
 const NOTIFICATIONS_ROUTE_BY_PORTAL: Partial<Record<Portal, string>> = {
   consumer: "/consumer/notifications",
+   partner: "/partner/notifications", 
 };
 
 export function TopBar() {

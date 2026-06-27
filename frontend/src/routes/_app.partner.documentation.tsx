@@ -26,30 +26,30 @@ interface ChecklistItem {
 // â”€â”€â”€ Static checklist definitions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const PRE_VISIT_ITEMS: ChecklistItem[] = [
-  { id: "consent",   title: "Patient Consent Obtained",      description: "Verbal or written consent for care" },
-  { id: "identity",  title: "Patient Identity Verified",     description: "Confirmed name, age, and booking details" },
-  { id: "env",       title: "Safe Environment Confirmed",    description: "Clean, well-lit, appropriate for care" },
-  { id: "emergency", title: "Emergency Contact Available",   description: "Family member or caregiver present" },
+  { id: "consent", title: "Patient Consent Obtained", description: "Verbal or written consent for care" },
+  { id: "identity", title: "Patient Identity Verified", description: "Confirmed name, age, and booking details" },
+  { id: "env", title: "Safe Environment Confirmed", description: "Clean, well-lit, appropriate for care" },
+  { id: "emergency", title: "Emergency Contact Available", description: "Family member or caregiver present" },
 ];
 
 const DURING_VISIT_ITEMS: ChecklistItem[] = [
-  { id: "vitals",      title: "Vitals Recorded",              description: "BP, heart rate, temperature, SpOâ‚‚ captured" },
-  { id: "assessment",  title: "Patient Assessment Done",      description: "Alert orientation and pain level noted" },
-  { id: "meds",        title: "Medications Administered",     description: "Prescribed medications given as planned" },
-  { id: "procedure",   title: "Procedure / Care Delivered",   description: "All planned care steps completed" },
+  { id: "vitals", title: "Vitals Recorded", description: "BP, heart rate, temperature, SpOâ‚‚ captured" },
+  { id: "assessment", title: "Patient Assessment Done", description: "Alert orientation and pain level noted" },
+  { id: "meds", title: "Medications Administered", description: "Prescribed medications given as planned" },
+  { id: "procedure", title: "Procedure / Care Delivered", description: "All planned care steps completed" },
 ];
 
 const POST_VISIT_ITEMS: ChecklistItem[] = [
-  { id: "notes",       title: "Clinical Notes Documented",   description: "Observations and findings recorded" },
-  { id: "handover",    title: "Handover Information Given",  description: "Family / next caregiver briefed" },
-  { id: "followup",    title: "Follow-up Scheduled",         description: "Next visit or escalation arranged" },
-  { id: "closeout",    title: "Visit Closed Out",            description: "All records finalised and submitted" },
+  { id: "notes", title: "Clinical Notes Documented", description: "Observations and findings recorded" },
+  { id: "handover", title: "Handover Information Given", description: "Family / next caregiver briefed" },
+  { id: "followup", title: "Follow-up Scheduled", description: "Next visit or escalation arranged" },
+  { id: "closeout", title: "Visit Closed Out", description: "All records finalised and submitted" },
 ];
 
 const PHASE_META: Record<Phase, { label: string; items: ChecklistItem[]; next: string; nextPhase?: Phase }> = {
-  "pre-visit":    { label: "Pre-Visit",    items: PRE_VISIT_ITEMS,    next: "Proceed to Vitals Entry",  nextPhase: "during-visit" },
-  "during-visit": { label: "During Visit", items: DURING_VISIT_ITEMS, next: "Proceed to Assessment",    nextPhase: "post-visit"   },
-  "post-visit":   { label: "Post-Visit",   items: POST_VISIT_ITEMS,   next: "Complete Visit",           nextPhase: undefined      },
+  "pre-visit": { label: "Pre-Visit", items: PRE_VISIT_ITEMS, next: "Proceed to Vitals Entry", nextPhase: "during-visit" },
+  "during-visit": { label: "During Visit", items: DURING_VISIT_ITEMS, next: "Proceed to Assessment", nextPhase: "post-visit" },
+  "post-visit": { label: "Post-Visit", items: POST_VISIT_ITEMS, next: "Complete Visit", nextPhase: undefined },
 };
 
 // â”€â”€â”€ Sub-components â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -64,14 +64,14 @@ function PhaseTab({ phase, active, done, onClick }: { phase: Phase; active: bool
         active
           ? "bg-primary text-primary-foreground shadow-sm"
           : done
-          ? "text-primary bg-primary/8 hover:bg-primary/12"
-          : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
+            ? "text-primary bg-primary/8 hover:bg-primary/12"
+            : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
       ].join(" ")}
     >
       {done && !active && (
         <span className="absolute top-1.5 right-2 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500/15">
           <svg className="h-2.5 w-2.5 text-emerald-600" viewBox="0 0 12 12" fill="none">
-            <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </span>
       )}
@@ -110,7 +110,7 @@ function ChecklistCard({
       >
         {checked && (
           <svg className="h-3 w-3 text-primary-foreground" viewBox="0 0 12 12" fill="none">
-            <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         )}
       </span>
@@ -139,15 +139,15 @@ function ProgressBar({ value }: { value: number }) {
 
 function WorkerDocumentation() {
   const rows = useEntities("booking");
-  const [visitId, setVisitId]   = useState(rows[0]?.id ?? "");
-  const [phase, setPhase]       = useState<Phase>("pre-visit");
-  const [donePhases, setDone]   = useState<Set<Phase>>(new Set());
-  const [checked, setChecked]   = useState<Record<string, boolean>>({});
-
+  const [visitId, setVisitId] = useState(rows[0]?.id ?? "");
+  const [phase, setPhase] = useState<Phase>("pre-visit");
+  const [donePhases, setDone] = useState<Set<Phase>>(new Set());
+  const [checked, setChecked] = useState<Record<string, boolean>>({});
+  const [visitCompleted, setVisitCompleted] = useState(false);
   const visit = rows.find(v => v.id === visitId);
-  const store  = useOrchestration();
+  const store = useOrchestration();
   const { user } = useAuth();
-  const role  = user?.role ?? null;
+  const role = user?.role ?? null;
   const actor = user?.email ?? "worker@nurseconnect.in";
 
   const v: any = visit?.data ?? {};
@@ -161,10 +161,10 @@ function WorkerDocumentation() {
     store.annotate("booking", visit.id, actor, role, notes);
   }, [visit, store, actor, role]);
 
-  const currentItems   = PHASE_META[phase].items;
-  const checkedCount   = currentItems.filter(i => checked[i.id]).length;
-  const allChecked     = checkedCount === currentItems.length;
-  const progressPct    = currentItems.length ? Math.round((checkedCount / currentItems.length) * 100) : 0;
+  const currentItems = PHASE_META[phase].items;
+  const checkedCount = currentItems.filter(i => checked[i.id]).length;
+  const allChecked = checkedCount === currentItems.length;
+  const progressPct = currentItems.length ? Math.round((checkedCount / currentItems.length) * 100) : 0;
 
   const toggleItem = (id: string) =>
     setChecked(prev => ({ ...prev, [id]: !prev[id] }));
@@ -177,6 +177,9 @@ function WorkerDocumentation() {
       stamp({ vitalsComplete: true, vitalsAt: new Date().toISOString() }, `During-visit documentation completed`);
     } else {
       stamp({ documentationComplete: true, documentationAt: new Date().toISOString() }, "Visit documentation submitted");
+      setDone(prev => new Set([...prev, phase]));
+      setVisitCompleted(true);
+      return;
     }
     setDone(prev => new Set([...prev, phase]));
     if (meta.nextPhase) setPhase(meta.nextPhase);
@@ -186,11 +189,29 @@ function WorkerDocumentation() {
   const phaseIndex = phases.indexOf(phase);
 
   const bannerInstructions: Record<Phase, string> = {
-    "pre-visit":    "Complete all items before starting the visit",
+    "pre-visit": "Complete all items before starting the visit",
     "during-visit": "Record vitals, observations and care delivered",
-    "post-visit":   "Finalise notes, handover and close out the visit",
+    "post-visit": "Finalise notes, handover and close out the visit",
   };
-
+  if (visitCompleted) return (
+    <div className="min-h-screen bg-muted/30 flex items-center justify-center p-6">
+      <div className="max-w-md w-full rounded-2xl border border-emerald-200 bg-emerald-50 p-8 text-center space-y-4">
+        <div className="h-16 w-16 rounded-full bg-emerald-500 flex items-center justify-center mx-auto">
+          <svg className="h-8 w-8 text-white" viewBox="0 0 12 12" fill="none">
+            <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
+        <h2 className="text-[20px] font-bold text-emerald-700">Visit Completed!</h2>
+        <p className="text-[13px] text-emerald-600">All documentation has been submitted successfully.</p>
+        <button
+          onClick={() => { setVisitCompleted(false); setPhase("pre-visit"); setDone(new Set()); setChecked({}); }}
+          className="w-full rounded-xl bg-emerald-600 text-white py-3 text-[14px] font-semibold hover:bg-emerald-700 transition-colors"
+        >
+          Start New Visit
+        </button>
+      </div>
+    </div>
+  );
   return (
     <div className="min-h-screen bg-muted/30">
       {/* â”€â”€ Visit selector bar â”€â”€ */}
@@ -260,7 +281,7 @@ function WorkerDocumentation() {
         <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/6 px-4 py-3.5">
           <span className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-primary/15">
             <svg className="h-3 w-3 text-primary" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M8 1a7 7 0 100 14A7 7 0 008 1zm.75 10.5h-1.5v-5h1.5v5zm0-6.5h-1.5V3.5h1.5V5z"/>
+              <path d="M8 1a7 7 0 100 14A7 7 0 008 1zm.75 10.5h-1.5v-5h1.5v5zm0-6.5h-1.5V3.5h1.5V5z" />
             </svg>
           </span>
           <div>
@@ -316,7 +337,7 @@ function WorkerDocumentation() {
                 className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11.5px] font-medium text-emerald-700"
               >
                 <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none">
-                  <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
                 {PHASE_META[dp].label} complete
               </span>

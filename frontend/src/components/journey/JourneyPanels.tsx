@@ -31,7 +31,7 @@ import {
 import type { ActionKey } from "@/lib/actions";
 import { can } from "@/lib/actions";
 import { History as HistoryIcon, ClipboardList, ShieldCheck, Package as PackageIcon, FileText, CheckCircle2 } from "lucide-react";
-
+import { toast } from "sonner";
 // ---------------------------------------------------------------- Helpers
 function labelFor(a: ActionKey): string {
   return a.split(".")[1].replace(/_/g, " ").replace(/^\w/, c => c.toUpperCase());
@@ -279,25 +279,15 @@ export function VisitExecutionPanel({ visitId, readOnly = false }: { visitId: st
               schema={checklistSchema}
               submitLabel="Save checklist"
               readonly={readOnly}
-              onSubmit={readOnly ? noop : () => patchData(
-                { checklistComplete: true, checklistAt: new Date().toISOString() },
-                `Clinical checklist submitted (${checklistSchema.key})`,
-              )}
+              onSubmit={readOnly ? noop : () => {
+                patchData(
+                  { checklistComplete: true, checklistAt: new Date().toISOString() },
+                  `Clinical checklist submitted (${checklistSchema.key})`,
+                );
+                toast.success("Checklist saved successfully!");
+              }}
             />
-            {!readOnly && (
-              <button
-                type="button"
-                onClick={() => {
-                  patchData(
-                    { checklistComplete: true, checklistAt: new Date().toISOString() },
-                    `Clinical checklist submitted (${checklistSchema.key})`,
-                  );
-                }}
-                className="mt-2 w-full rounded-md bg-primary text-primary-foreground px-3 py-2 text-[13px] font-medium hover:opacity-95"
-              >
-                Save checklist ✓
-              </button>
-            )}
+
           </RuntimeBoundary>
         </Card>
       </div>
@@ -313,11 +303,15 @@ export function VisitExecutionPanel({ visitId, readOnly = false }: { visitId: st
               schema={documentationSchema}
               submitLabel="Submit documentation"
               readonly={readOnly}
-              onSubmit={readOnly ? noop : () => patchData(
-                { documentationComplete: true, documentationAt: new Date().toISOString() },
-                "Visit documentation submitted",
-              )}
+              onSubmit={readOnly ? noop : () => {
+                patchData(
+                  { documentationComplete: true, documentationAt: new Date().toISOString() },
+                  "Visit documentation submitted",
+                );
+                toast.success("Documentation submitted successfully!");
+              }}
             />
+
           </RuntimeBoundary>
         </Card>
       </div>
