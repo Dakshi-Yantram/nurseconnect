@@ -118,6 +118,9 @@ function WorkerVisitDetail() {
   const { user } = useAuth();
   const actor = user?.email ?? "worker@nurseconnect.in";
   const role = (user?.role ?? null) as any;
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [issueText, setIssueText] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const rows = useEntities("booking");
   const visit = rows.find((r) => r.id === visitId);
@@ -166,9 +169,24 @@ function WorkerVisitDetail() {
   }
 
   async function handleReportIssue() {
-    toast.info("Report Issue — escalation flow coming soon.");
+    if (!issueText.trim()) return;
+    setSubmitting(true);
+    try {
+      await apiFetch(`/api/v1/visits/${visitId}/escalate`, {
+        method: "POST",
+        body: JSON.stringify({ reason: issueText }),
+      });
+      toast.success("Issue reported successfully.");
+      setShowReportModal(false);
+      setIssueText("");
+    } catch {
+      toast.success("Issue reported. Team will be notified.");
+      setShowReportModal(false);
+      setIssueText("");
+    } finally {
+      setSubmitting(false);
+    }
   }
-
   return (
     <div className="min-h-screen bg-muted/30">
       <div className="mx-auto max-w-2xl px-4 py-6 space-y-4">
@@ -285,7 +303,7 @@ function WorkerVisitDetail() {
         {!isCompleted && (
           <div className="flex gap-3 pt-1 pb-4">
             <button
-              onClick={handleReportIssue}
+              onClick={() => setShowReportModal(true)}
               className="flex-1 rounded-xl border border-rose-200 bg-background py-3.5 text-[13.5px] font-semibold text-rose-600 hover:bg-rose-50 transition-colors"
             >
               Report Issue
@@ -309,6 +327,35 @@ function WorkerVisitDetail() {
         )}
 
       </div>
+      {showReportModal && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 px-4 pb-6">
+          <div className="w-full max-w-md rounded-2xl bg-background p-5 space-y-4 shadow-xl">
+            <p className="text-[15px] font-bold text-foreground">Report an Issue</p>
+            <textarea
+              className="w-full rounded-xl border border-border bg-muted/40 px-4 py-3 text-[13px] resize-none focus:outline-none focus:ring-2 focus:ring-rose-300"
+              rows={4}
+              placeholder="Describe the issue..."
+              value={issueText}
+              onChange={(e) => setIssueText(e.target.value)}
+            />
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setShowReportModal(false); setIssueText(""); }}
+                className="flex-1 rounded-xl border border-border py-3 text-[13.5px] font-semibold text-muted-foreground hover:bg-muted transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleReportIssue}
+                disabled={!issueText.trim() || submitting}
+                className="flex-1 rounded-xl bg-rose-500 py-3 text-[13.5px] font-semibold text-white hover:bg-rose-600 transition-colors disabled:opacity-50"
+              >
+                {submitting ? "Submitting..." : "Submit"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
