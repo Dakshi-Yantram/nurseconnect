@@ -1,5 +1,5 @@
 ﻿import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Card } from "@/components/shared/Card";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -24,10 +24,101 @@ import type { ReactNode } from "react";
 
 export const Route = createFileRoute("/_app/consumer/bookings")({
   component: BookingsLayout,
-  head: () => ({ meta: [{ title: "Bookings â€” NurseConnect" }] }),
+  head: () => ({ meta: [{ title: "Bookings – NurseConnect" }] }),
 });
 
 const API = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+
+// ── City → approximate coordinates map ──────────────────────────────────────
+// Used as a fallback when the consumer profile has no stored lat/lng.
+// Covers the major Indian cities NurseConnect operates in.
+const CITY_COORDS: Record<string, { lat: number; lng: number; state: string; pincode: string }> = {
+  "hyderabad": { lat: 17.3850, lng: 78.4867, state: "Telangana", pincode: "500001" },
+  "bangalore": { lat: 12.9716, lng: 77.5946, state: "Karnataka", pincode: "560001" },
+  "bengaluru": { lat: 12.9716, lng: 77.5946, state: "Karnataka", pincode: "560001" },
+  "chennai": { lat: 13.0827, lng: 80.2707, state: "Tamil Nadu", pincode: "600001" },
+  "mumbai": { lat: 19.0760, lng: 72.8777, state: "Maharashtra", pincode: "400001" },
+  "delhi": { lat: 28.6139, lng: 77.2090, state: "Delhi", pincode: "110001" },
+  "delhi ncr": { lat: 28.6139, lng: 77.2090, state: "Delhi", pincode: "110001" },
+  "kolkata": { lat: 22.5726, lng: 88.3639, state: "West Bengal", pincode: "700001" },
+  "kochi": { lat: 9.9312, lng: 76.2673, state: "Kerala", pincode: "682001" },
+  "thrissur": { lat: 10.5276, lng: 76.2144, state: "Kerala", pincode: "680001" },
+  "pune": { lat: 18.5204, lng: 73.8567, state: "Maharashtra", pincode: "411001" },
+  "coimbatore": { lat: 11.0168, lng: 76.9558, state: "Tamil Nadu", pincode: "641001" },
+  "jaipur": { lat: 26.9124, lng: 75.7873, state: "Rajasthan", pincode: "302001" },
+  "warangal": { lat: 17.9784, lng: 79.5941, state: "Telangana", pincode: "506001" },
+  "visakhapatnam": { lat: 17.6868, lng: 83.2185, state: "Andhra Pradesh", pincode: "530001" },
+  "vijayawada": { lat: 16.5062, lng: 80.6480, state: "Andhra Pradesh", pincode: "520001" },
+};
+
+// Resolve coordinates and address fields for a booking.
+// Priority: (1) browser Geolocation API, (2) consumer profile stored lat/lng,
+// (3) city name lookup, (4) Hyderabad default.
+async function resolveLocation(
+  consumerCity?: string | null,
+  consumerState?: string | null,
+  consumerPincode?: string | null,
+  consumerLat?: number | null,
+  consumerLng?: number | null,
+): Promise<{ latitude: number; longitude: number; state: string; pincode: string; city: string }> {
+
+  // 1) Try browser Geolocation (best accuracy, real-time)
+  const browserCoords = await new Promise<GeolocationCoordinates | null>((resolve) => {
+    if (!navigator.geolocation) { resolve(null); return; }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve(pos.coords),
+      () => resolve(null),
+      { timeout: 4000, maximumAge: 60000 },
+    );
+  });
+
+  if (browserCoords) {
+    const cityKey = (consumerCity ?? "").toLowerCase().trim();
+    const cityData = CITY_COORDS[cityKey];
+    return {
+      latitude: browserCoords.latitude,
+      longitude: browserCoords.longitude,
+      state: consumerState ?? cityData?.state ?? "India",
+      pincode: consumerPincode ?? cityData?.pincode ?? "000000",
+      city: consumerCity ?? "Unknown",
+    };
+  }
+
+  // 2) Consumer profile stored coordinates
+  if (consumerLat && consumerLng) {
+    const cityKey = (consumerCity ?? "").toLowerCase().trim();
+    const cityData = CITY_COORDS[cityKey];
+    return {
+      latitude: consumerLat,
+      longitude: consumerLng,
+      state: consumerState ?? cityData?.state ?? "India",
+      pincode: consumerPincode ?? cityData?.pincode ?? "000000",
+      city: consumerCity ?? "Unknown",
+    };
+  }
+
+  // 3) City name lookup from consumer profile
+  const cityKey = (consumerCity ?? "").toLowerCase().trim();
+  if (cityKey && CITY_COORDS[cityKey]) {
+    const cityData = CITY_COORDS[cityKey];
+    return {
+      latitude: cityData.lat,
+      longitude: cityData.lng,
+      state: consumerState ?? cityData.state,
+      pincode: consumerPincode ?? cityData.pincode,
+      city: consumerCity ?? cityKey,
+    };
+  }
+
+  // 4) Hyderabad default (NurseConnect HQ city)
+  return {
+    latitude: 17.3850,
+    longitude: 78.4867,
+    state: "Telangana",
+    pincode: "500001",
+    city: consumerCity ?? "Hyderabad",
+  };
+}
 
 async function apiPost(path: string, body: unknown) {
   const token = localStorage.getItem("access_token");
@@ -48,6 +139,21 @@ async function apiPost(path: string, body: unknown) {
   return res.json();
 }
 
+// Fetch the logged-in consumer's profile to get stored location fields.
+async function fetchConsumerProfile() {
+  const token = localStorage.getItem("access_token");
+  if (!token) return null;
+  try {
+    const res = await fetch(`${API}/api/consumers/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
 function BookingsLayout() {
   const pathname = useRouterState({ select: s => s.location.pathname });
   if (pathname === "/consumer/bookings") return <ConsumerBookings />;
@@ -58,15 +164,19 @@ function ConsumerBookings() {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  // Store consumer profile for location resolution
+  const [consumerProfile, setConsumerProfile] = useState<any>(null);
 
   const bookings = useBookings();
   const patients = useConsumerPatients(user?.id);
   const services = useServices();
   const refetchBookings = useRefetchBookings();
 
-  // Build the schema fresh with real patient/service options each time the
-  // modal is opened â€” keeps templates.ts as the static base schema while
-  // letting these two fields reflect live data.
+  // Load consumer profile on mount for location fields
+  useEffect(() => {
+    fetchConsumerProfile().then(setConsumerProfile);
+  }, []);
+
   const liveSchema: FormSchema = useMemo(() => {
     const patientField = BOOKING_REQUEST_SCHEMA.sections[0].fields[0];
     const serviceField = BOOKING_REQUEST_SCHEMA.sections[0].fields[1];
@@ -127,6 +237,15 @@ function ConsumerBookings() {
 
     setSubmitting(true);
     try {
+      // ── PATCH 1: Resolve real location instead of hardcoded Bangalore ──
+      const location = await resolveLocation(
+        consumerProfile?.city,
+        consumerProfile?.state,
+        consumerProfile?.pincode,
+        consumerProfile?.latitude ? Number(consumerProfile.latitude) : null,
+        consumerProfile?.longitude ? Number(consumerProfile.longitude) : null,
+      );
+
       const created = await apiPost("/api/bookings/", {
         patient_id: patient.id,
         service_id: service.id,
@@ -141,13 +260,13 @@ function ConsumerBookings() {
         })(),
         is_urgent: false,
         address: {
-          line1: values.area || "â€”",
-          city: patient.city ?? "â€”",
-          state: "Karnataka",
-          pincode: "560001",
+          line1: values.area || "—",
+          city: location.city,
+          state: location.state,
+          pincode: location.pincode,
         },
-        latitude: 12.9716,
-        longitude: 77.5946,
+        latitude: location.latitude,
+        longitude: location.longitude,
         special_instructions: values.notes || undefined,
       });
 
@@ -170,7 +289,7 @@ function ConsumerBookings() {
           <div>
             <div className="text-[16px] font-semibold">Booking journey</div>
             <div className="text-[12.5px] text-muted-foreground">
-              Visits grouped by care stage â€” alerts, what's happening now, what's coming next, and what has recently completed.
+              Visits grouped by care stage — alerts, what's happening now, what's coming next, and what has recently completed.
             </div>
           </div>
           <WorkflowActionButton action="consumer.create_booking" icon={<Plus className="h-3.5 w-3.5" />}
@@ -198,17 +317,17 @@ function ConsumerBookings() {
                 emptyHint="No visits are currently underway."
               />
             </RuntimeBoundary>
-            <RuntimeBoundary label="Upcoming">
+            <RuntimeBoundary label="Upcoming care">
               <JourneySection
                 title={<span className="flex items-center gap-2"><Clock className="h-4 w-4 text-primary" /> Upcoming</span>}
                 rows={care.upcoming} tone="primary"
                 emptyHint="No upcoming visits scheduled."
               />
             </RuntimeBoundary>
-            <RuntimeBoundary label="Recently completed">
+            <RuntimeBoundary label="Completed care">
               <JourneySection
                 title={<span className="flex items-center gap-2"><HistoryIcon className="h-4 w-4 text-muted-foreground" /> Recently completed</span>}
-                rows={care.completed.slice(0, 8)} tone="muted"
+                rows={care.completed} tone="muted"
                 emptyHint="Completed visits will appear here."
               />
             </RuntimeBoundary>
@@ -216,71 +335,69 @@ function ConsumerBookings() {
         )}
       </div>
 
-      <Modal open={open} onClose={() => setOpen(false)} title="Request a new booking" size="xl">
+      <Modal open={open} onClose={() => setOpen(false)} title="New care booking">
         <SchemaForm
           schema={liveSchema}
-          submitLabel={submitting ? "Requestingâ€¦" : "Request booking"}
           onSubmit={onCreate}
+          submitLabel="Request booking"
         />
       </Modal>
     </>
   );
 }
 
+// ── Journey section component ────────────────────────────────────────────────
 function JourneySection({
-  title, rows, tone, emptyHint,
+  title,
+  rows,
+  tone,
+  emptyHint,
 }: {
   title: ReactNode;
-  rows: ReturnType<typeof useBookings>;
-  tone: "primary" | "emerald" | "muted" | "rose";
+  rows: any[];
+  tone: string;
   emptyHint?: string;
 }) {
-  const rail =
-    tone === "emerald" ? "bg-emerald-500"
-      : tone === "primary" ? "bg-primary"
-        : tone === "rose" ? "bg-rose-500"
-          : "bg-muted-foreground/40";
+  const accentMap: Record<string, string> = {
+    rose: "text-rose-700",
+    emerald: "text-emerald-600",
+    primary: "text-primary",
+    muted: "text-muted-foreground",
+  };
+
+  if (rows.length === 0 && !emptyHint) return null;
 
   return (
-    <Card
-      title={
-        <div className="flex items-center justify-between">
-          <span>{title}</span>
-          <span className="text-[11px] text-muted-foreground">{rows.length}</span>
-        </div>
-      }
-      padded={false}
-    >
-      {rows.length === 0
-        ? <div className="p-5"><EmptyState icon={CalendarCheck} title="Nothing here yet" description={emptyHint} /></div>
-        : rows.map(b => {
+    <Card title={title} padded={false}>
+      {rows.length === 0 ? (
+        <p className="px-4 py-3 text-[12.5px] text-muted-foreground">{emptyHint}</p>
+      ) : (
+        rows.map((b) => {
           const state = bindStatus("booking", b.rawStatus);
           return (
             <Link
               key={b.id}
               to="/consumer/bookings/$bookingId"
               params={{ bookingId: b.id }}
-              className="flex items-stretch border-b border-border last:border-0 hover:bg-muted/30"
+              className="flex items-center gap-3 px-4 py-2.5 border-b border-border last:border-0 hover:bg-muted/30"
             >
-              <span className={`w-1 ${rail}`} aria-hidden />
-              <div className="flex items-center gap-3 flex-1 px-4 py-3">
-                <div className="min-w-0 flex-1">
-                  <div className="text-[13px] font-medium truncate">
-                    {b.patientName} Â· {b.service}
-                  </div>
-                  <div className="text-[11.5px] text-muted-foreground truncate">
-                    #{b.id} Â· {b.area ?? "â€”"}{b.startedAt ? ` Â· ${b.startedAt}` : ""}
-                  </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[13px] font-medium truncate">
+                  #{b.id.slice(0, 8)} · {b.service ?? "Service"} · {b.patientName ?? "—"}
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <StatusBadge workflow="booking" state={state} />
-                  <SLAIndicator workflow="booking" state={state} enteredAt={parseEnteredAt(b.startedAt)} />
-                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                <div className="text-[11.5px] text-muted-foreground">
+                  {b.area ?? "—"}{b.startedAt ? ` · ${b.startedAt}` : ""}
                 </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <StatusBadge workflow="booking" state={state} />
+                <SLAIndicator workflow="booking" state={state} enteredAt={parseEnteredAt(b.startedAt)} />
+                <ChevronRight className="h-4 w-4 text-muted-foreground" />
               </div>
             </Link>
           );
-        })}
+        })
+      )}
     </Card>
   );
 }

@@ -3,6 +3,7 @@ from typing import List, Optional
 from uuid import UUID
 
 from datetime import date, datetime, timezone
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -14,12 +15,16 @@ from app.core.deps import CurrentUser, get_current_user, is_admin, require_roles
 from app.models.enums import (
     BookingStatus,
     EscalationStatus,
+    GenderRestriction,
     UserRole,
     UserStatus,
+    VisitFrequency,
     WorkerOnboardingStatus,
+    WorkerTier,
 )
 from app.models.models import (
     Booking,
+    CarePackage,
     ConsumerProfile,
     Escalation,
     FinancialLedger,
@@ -278,6 +283,8 @@ async def rematch_booking(
     b.rematch_count += 1
     await db.commit()
     return {"rematch_initiated": True, "attempt": b.rematch_count}
+
+
 @router.get("/patients")
 async def admin_list_patients(
     current: CurrentUser = Depends(get_current_user),
@@ -338,3 +345,181 @@ async def admin_list_consumers(
         }
         for profile, user in res.all()
     ]
+
+
+# ============================================================================
+# PATCH 3 — Admin Care Package endpoints
+# Backs the admin Care Packages page (_app.care-packages.tsx):
+#   POST   /api/admin/care-packages              create
+#   PUT    /api/admin/care-packages/{id}          update
+#   PATCH  /api/admin/care-packages/{id}/toggle   activate/deactivate
+# ============================================================================
+class CarePackageCreateRequest(BaseModel):
+    name: str
+    package_code: str
+    tagline: Optional[str] = None
+    description: Optional[str] = None
+    target_condition: Optional[str] = None
+    min_tier: str = "tier1"
+    gender_restriction: str = "any"
+    visit_frequency: Optional[str] = None
+    visits_per_cycle: Optional[int] = None
+    cycle_duration_days: Optional[int] = None
+    package_price: Optional[float] = None
+    per_visit_price: Optional[float] = None
+    commission_pct: Optional[float] = None
+    subsidy_eligible: bool = False
+    requires_prescription: bool = False
+    insurance_covered: bool = True
+    available_cities: Optional[List[str]] = None
+
+
+class CarePackageUpdateRequest(CarePackageCreateRequest):
+    pass
+
+
+def _serialize_care_package(pkg: CarePackage) -> dict:
+    return {
+        "id": str(pkg.id),
+        "package_code": pkg.package_code,
+        "name": pkg.name,
+        "tagline": pkg.tagline,
+        "description": pkg.description,
+        "target_condition": pkg.target_condition,
+        "min_tier": pkg.min_tier.value if pkg.min_tier else None,
+        "gender_restriction": pkg.gender_restriction.value if pkg.gender_restriction else None,
+        "visit_frequency": pkg.visit_frequency.value if pkg.visit_frequency else None,
+        "visits_per_cycle": pkg.visits_per_cycle,
+        "cycle_duration_days": pkg.cycle_duration_days,
+        "shift_hours": pkg.shift_hours,
+        "package_price": float(pkg.package_price) if pkg.package_price is not None else None,
+        "per_visit_price": float(pkg.per_visit_price) if pkg.per_visit_price is not None else None,
+        "subsidy_eligible": pkg.subsidy_eligible,
+        "commission_pct": float(pkg.commission_pct) if pkg.commission_pct is not None else None,
+        "requires_prescription": pkg.requires_prescription,
+        "insurance_covered": pkg.insurance_covered,
+        "is_active": pkg.is_active,
+        "version": pkg.version,
+        "available_cities": pkg.available_cities,
+        "created_at": pkg.created_at.isoformat() if pkg.created_at else None,
+    }
+
+
+def _validate_enum_field(value: Optional[str], enum_cls, field_name: str):
+    if value is None:
+        return None
+    try:
+        return enum_cls(value)
+    except ValueError:
+        valid = ", ".join(e.value for e in enum_cls)
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid {field_name} '{value}'. Must be one of: {valid}",
+        )
+
+
+@router.post("/care-packages", status_code=201)
+async def create_care_package(
+    payload: CarePackageCreateRequest,
+    current: CurrentUser = Depends(require_roles(UserRole.admin_ops, UserRole.admin_super)),
+    db: AsyncSession = Depends(get_db),
+):
+    existing = await db.execute(
+        select(CarePackage).where(CarePackage.package_code == payload.package_code.strip().upper())
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail=f"Package code '{payload.package_code}' already exists")
+
+    min_tier = _validate_enum_field(payload.min_tier, WorkerTier, "min_tier")
+    gender_restriction = _validate_enum_field(payload.gender_restriction, GenderRestriction, "gender_restriction")
+    visit_frequency = _validate_enum_field(payload.visit_frequency, VisitFrequency, "visit_frequency")
+
+    pkg = CarePackage(
+        package_code=payload.package_code.strip().upper(),
+        name=payload.name.strip(),
+        tagline=payload.tagline,
+        description=payload.description,
+        target_condition=payload.target_condition,
+        min_tier=min_tier or WorkerTier.tier1,
+        gender_restriction=gender_restriction or GenderRestriction.any,
+        visit_frequency=visit_frequency,
+        visits_per_cycle=payload.visits_per_cycle,
+        cycle_duration_days=payload.cycle_duration_days,
+        package_price=Decimal(str(payload.package_price)) if payload.package_price is not None else None,
+        per_visit_price=Decimal(str(payload.per_visit_price)) if payload.per_visit_price is not None else None,
+        subsidy_eligible=payload.subsidy_eligible,
+        commission_pct=Decimal(str(payload.commission_pct)) if payload.commission_pct is not None else None,
+        requires_prescription=payload.requires_prescription,
+        insurance_covered=payload.insurance_covered,
+        available_cities=payload.available_cities,
+        is_active=True,
+        version=1,
+        created_by=current.id,
+    )
+    db.add(pkg)
+    await db.commit()
+    await db.refresh(pkg)
+    return _serialize_care_package(pkg)
+
+
+@router.put("/care-packages/{package_id}")
+async def update_care_package(
+    package_id: UUID,
+    payload: CarePackageUpdateRequest,
+    current: CurrentUser = Depends(require_roles(UserRole.admin_ops, UserRole.admin_super)),
+    db: AsyncSession = Depends(get_db),
+):
+    res = await db.execute(select(CarePackage).where(CarePackage.id == package_id))
+    pkg = res.scalar_one_or_none()
+    if not pkg:
+        raise HTTPException(status_code=404, detail="Care package not found")
+
+    new_code = payload.package_code.strip().upper()
+    if new_code != pkg.package_code:
+        dupe = await db.execute(
+            select(CarePackage).where(CarePackage.package_code == new_code, CarePackage.id != package_id)
+        )
+        if dupe.scalar_one_or_none():
+            raise HTTPException(status_code=409, detail=f"Package code '{new_code}' already exists")
+
+    min_tier = _validate_enum_field(payload.min_tier, WorkerTier, "min_tier")
+    gender_restriction = _validate_enum_field(payload.gender_restriction, GenderRestriction, "gender_restriction")
+    visit_frequency = _validate_enum_field(payload.visit_frequency, VisitFrequency, "visit_frequency")
+
+    pkg.package_code = new_code
+    pkg.name = payload.name.strip()
+    pkg.tagline = payload.tagline
+    pkg.description = payload.description
+    pkg.target_condition = payload.target_condition
+    pkg.min_tier = min_tier or pkg.min_tier
+    pkg.gender_restriction = gender_restriction or pkg.gender_restriction
+    pkg.visit_frequency = visit_frequency
+    pkg.visits_per_cycle = payload.visits_per_cycle
+    pkg.cycle_duration_days = payload.cycle_duration_days
+    pkg.package_price = Decimal(str(payload.package_price)) if payload.package_price is not None else None
+    pkg.per_visit_price = Decimal(str(payload.per_visit_price)) if payload.per_visit_price is not None else None
+    pkg.subsidy_eligible = payload.subsidy_eligible
+    pkg.commission_pct = Decimal(str(payload.commission_pct)) if payload.commission_pct is not None else None
+    pkg.requires_prescription = payload.requires_prescription
+    pkg.insurance_covered = payload.insurance_covered
+    pkg.available_cities = payload.available_cities
+    pkg.version = (pkg.version or 1) + 1
+
+    await db.commit()
+    await db.refresh(pkg)
+    return _serialize_care_package(pkg)
+
+
+@router.patch("/care-packages/{package_id}/toggle")
+async def toggle_care_package(
+    package_id: UUID,
+    current: CurrentUser = Depends(require_roles(UserRole.admin_ops, UserRole.admin_super)),
+    db: AsyncSession = Depends(get_db),
+):
+    res = await db.execute(select(CarePackage).where(CarePackage.id == package_id))
+    pkg = res.scalar_one_or_none()
+    if not pkg:
+        raise HTTPException(status_code=404, detail="Care package not found")
+    pkg.is_active = not pkg.is_active
+    await db.commit()
+    return {"id": str(pkg.id), "is_active": pkg.is_active}

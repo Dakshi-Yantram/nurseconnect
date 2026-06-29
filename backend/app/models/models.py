@@ -838,6 +838,11 @@ class Escalation(Base):
     resolved_by: Mapped[Optional[UUID]] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id"))
     resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     resolution_notes: Mapped[Optional[str]] = mapped_column(Text)
+    # Patch 6 — Support dashboard
+    assigned_to: Mapped[Optional[UUID]] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("users.id"))
+    assigned_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    internal_notes: Mapped[Optional[str]] = mapped_column(Text)
+    priority: Mapped[str] = mapped_column(String(20), default="normal")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, server_default=func.now())
 
 

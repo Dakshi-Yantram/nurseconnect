@@ -1,9 +1,11 @@
 """Visit lifecycle: check-in, check-out, vitals, medications, checklist, rating, care notes."""
+import random
 from datetime import datetime, timezone
 from typing import List
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +17,8 @@ from app.core.deps import (
     get_worker_profile,
     is_admin,
 )
+from app.core.redis_client import redis_client
+from app.integrations.providers import msg91_client
 from app.models.enums import (
     BookingStatus,
     ConsentType,
@@ -119,6 +123,264 @@ async def checkin(
     await db.refresh(visit)
     await manager.broadcast(booking_topic(booking_id), {"type": "visit.checked_in", "booking_id": str(booking_id)})
     return VisitRecordOut.model_validate(visit)
+
+
+# ============================================================================
+# PATCH 4 — OTP-to-start-visit
+#
+# Two endpoints:
+#   POST /{booking_id}/generate-start-otp  — consumer triggers, SMS sent
+#   POST /{booking_id}/verify-start-otp    — nurse enters code, starts visit
+#
+# Redis keys:
+#   visit_start_otp:{booking_id}            4-digit code, TTL 600s
+#   visit_start_otp_attempts:{booking_id}   attempt counter, TTL 600s
+#
+# NOTE ON BOOKING STATUS — fixed from the original patch draft:
+# The original patch checked for BookingStatus.active / BookingStatus.claimed,
+# neither of which exists on this enum (see app/models/enums.py). The real
+# states a booking passes through before/during a visit are:
+#   assigned -> worker_en_route -> worker_arrived -> in_progress -> completed
+# OTP generation should be allowed once a worker is assigned and en route to
+# arrived (i.e. the nurse could plausibly be at the door), and naturally
+# also while in_progress already (e.g. consumer hits the button twice).
+# Adjust this tuple if your dispatch flow differs.
+# ============================================================================
+
+_OTP_TTL_SECONDS = 600          # 10 minutes
+_OTP_MAX_ATTEMPTS = 5           # brute-force cap
+_OTP_KEY_PREFIX = "visit_start_otp"
+_OTP_ATTEMPTS_PREFIX = "visit_start_otp_attempts"
+
+_OTP_ELIGIBLE_STATUSES = (
+    BookingStatus.assigned,
+    BookingStatus.worker_en_route,
+    BookingStatus.worker_arrived,
+    BookingStatus.in_progress,
+)
+
+
+def _otp_key(booking_id) -> str:
+    return f"{_OTP_KEY_PREFIX}:{booking_id}"
+
+
+def _attempts_key(booking_id) -> str:
+    return f"{_OTP_ATTEMPTS_PREFIX}:{booking_id}"
+
+
+class VisitStartOtpVerifyRequest(BaseModel):
+    otp: str
+    latitude: float
+    longitude: float
+
+
+@router.post("/{booking_id}/generate-start-otp")
+async def generate_visit_start_otp(
+    booking_id: UUID,
+    profile: ConsumerProfile = Depends(get_consumer_profile),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Called by the CONSUMER when the nurse has arrived at the door.
+    Generates a 4-digit OTP, stores it in Redis for 10 minutes,
+    and SMSes it to the consumer's registered phone.
+
+    The consumer reads the code aloud to the nurse, who enters it in the
+    nurse app to start the visit. The OTP is never returned in the API
+    response to prevent interception.
+    """
+    bres = await db.execute(
+        select(Booking).where(
+            Booking.id == booking_id,
+            Booking.consumer_id == profile.id,
+        )
+    )
+    booking = bres.scalar_one_or_none()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    if booking.status not in _OTP_ELIGIBLE_STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "BOOKING_NOT_READY",
+                "message": "Visit cannot be started in the current booking state.",
+            },
+        )
+
+    # Check if OTP already exists and is still valid — don't spam
+    existing = await redis_client.get(_otp_key(booking_id))
+    if existing:
+        ttl = await redis_client.ttl(_otp_key(booking_id))
+        return {
+            "sent": True,
+            "message": "OTP already active. Ask your nurse to enter it.",
+            "expires_in_seconds": ttl,
+        }
+
+    otp_code = str(random.randint(1000, 9999))
+
+    await redis_client.setex(_otp_key(booking_id), _OTP_TTL_SECONDS, otp_code)
+    await redis_client.delete(_attempts_key(booking_id))
+
+    from app.models.models import User
+    ures = await db.execute(select(User).where(User.id == profile.user_id))
+    user = ures.scalar_one_or_none()
+    phone = user.phone_e164 if user else None
+
+    sms_sent = False
+    if phone:
+        try:
+            resp = await msg91_client.send_otp(phone, otp_code)
+            sms_sent = resp.get("type") == "success"
+        except Exception:
+            # SMS failure must not block — the nurse can still manually share
+            # the code from the consumer's screen
+            sms_sent = False
+
+    await audit(
+        db, profile.user_id, "consumer",
+        "visit.otp_generated", "booking", booking_id,
+        {"sms_sent": sms_sent},
+    )
+    await db.commit()
+
+    return {
+        "sent": True,
+        "sms_sent": sms_sent,
+        "message": (
+            "Visit code sent to your registered number."
+            if sms_sent
+            else "Visit code generated. Show it to your nurse from the app."
+        ),
+        "expires_in_seconds": _OTP_TTL_SECONDS,
+        # DEV ONLY — never enable in production. Uncomment only for local testing.
+        # "_dev_otp": otp_code,
+    }
+
+
+@router.post("/{booking_id}/verify-start-otp", response_model=VisitRecordOut)
+async def verify_visit_start_otp(
+    booking_id: UUID,
+    payload: VisitStartOtpVerifyRequest,
+    profile: WorkerProfile = Depends(get_worker_profile),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Called by the NURSE after the consumer reads the OTP aloud.
+    On success, checks the nurse in and starts the visit — identical outcome
+    to /checkin but gated on OTP verification first.
+    """
+    bres = await db.execute(
+        select(Booking).where(
+            Booking.id == booking_id,
+            Booking.worker_id == profile.id,
+        )
+    )
+    booking = bres.scalar_one_or_none()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found or not assigned to you")
+
+    # ── Brute-force guard ───────────────────────────────────────────────────
+    attempts_raw = await redis_client.get(_attempts_key(booking_id))
+    attempts = int(attempts_raw) if attempts_raw else 0
+    if attempts >= _OTP_MAX_ATTEMPTS:
+        await redis_client.delete(_otp_key(booking_id))
+        await redis_client.delete(_attempts_key(booking_id))
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "OTP_MAX_ATTEMPTS_EXCEEDED",
+                "message": (
+                    "Too many incorrect attempts. "
+                    "Ask the consumer to generate a new visit code."
+                ),
+            },
+        )
+
+    stored_otp = await redis_client.get(_otp_key(booking_id))
+    if not stored_otp:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "OTP_EXPIRED",
+                "message": "Visit code has expired. Ask the consumer to generate a new one.",
+            },
+        )
+
+    if payload.otp.strip() != stored_otp:
+        pipe = redis_client.pipeline()
+        pipe.incr(_attempts_key(booking_id))
+        pipe.expire(_attempts_key(booking_id), _OTP_TTL_SECONDS)
+        await pipe.execute()
+
+        remaining = _OTP_MAX_ATTEMPTS - (attempts + 1)
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "OTP_INVALID",
+                "message": f"Incorrect visit code. {remaining} attempt(s) remaining.",
+                "attempts_remaining": remaining,
+            },
+        )
+
+    # OTP verified — delete keys immediately
+    await redis_client.delete(_otp_key(booking_id))
+    await redis_client.delete(_attempts_key(booking_id))
+
+    vres = await db.execute(select(VisitRecord).where(VisitRecord.booking_id == booking_id))
+    visit = vres.scalar_one_or_none()
+    if visit and visit.check_in_at:
+        raise HTTPException(status_code=400, detail="Already checked in")
+
+    try:
+        await require_consent(
+            db,
+            patient_id=booking.patient_id,
+            consent_type=ConsentType.service,
+            booking_id=booking.id,
+            action="start the visit",
+        )
+    except ConsentMissingError as ce:
+        raise HTTPException(
+            status_code=403,
+            detail={"code": ce.code, "message": ce.message, "consent_type": ce.consent_type.value},
+        ) from None
+
+    if not visit:
+        visit = VisitRecord(
+            booking_id=booking.id,
+            worker_id=profile.id,
+            patient_id=booking.patient_id,
+        )
+        db.add(visit)
+        await db.flush()
+
+    visit.check_in_at = datetime.now(timezone.utc)
+    visit.check_in_latitude = payload.latitude
+    visit.check_in_longitude = payload.longitude
+    visit.status = VisitStatus.in_progress
+    booking.status = BookingStatus.in_progress
+
+    await audit(
+        db, profile.user_id, "worker",
+        "visit.checkin_via_otp", "visit", visit.id,
+        {"otp_verified": True},
+    )
+    await db.commit()
+    await db.refresh(visit)
+
+    await manager.broadcast(
+        booking_topic(booking_id),
+        {"type": "visit.checked_in", "booking_id": str(booking_id), "method": "otp"},
+    )
+
+    return VisitRecordOut.model_validate(visit)
+
+
+# ============================================================================
+# END PATCH 4
+# ============================================================================
 
 
 @router.post("/{booking_id}/checkout", response_model=VisitRecordOut)

@@ -10,9 +10,9 @@ import {
 // ---------------------------------------------------------------------------
 // Roles + Portals
 // ---------------------------------------------------------------------------
-export type Role = "super_admin" | "admin" | "consumer" | "partner";
+export type Role = "super_admin" | "admin" | "support" | "consumer" | "partner";
 
-export type Portal = "admin" | "consumer" | "partner";
+export type Portal = "admin" | "support" | "consumer" | "partner";
 
 export type SelfRegisterRole = Extract<Role, "consumer" | "partner">;
 export const SELF_REGISTER_ROLES: { id: SelfRegisterRole; label: string; tagline: string }[] = [
@@ -23,6 +23,7 @@ export const SELF_REGISTER_ROLES: { id: SelfRegisterRole; label: string; tagline
 export const ROLES: { id: Role; label: string; description: string }[] = [
   { id: "super_admin", label: "Super Admin",       description: "Yantram — full platform access" },
   { id: "admin",       label: "Admin",             description: "Hospital/Org — manages their nurses and operations" },
+  { id: "support", label: "Support Staff", description: "Ticket resolution and escalation management" },
   { id: "consumer",    label: "Family / Patient",  description: "Self-served bookings, patients, consents" },
   { id: "partner",     label: "Care Professional", description: "Marketplace claiming + visit execution" },
 ];
@@ -32,12 +33,14 @@ export const ROLE_PORTAL: Record<Role, Portal> = {
   admin:       "admin",
   consumer:    "consumer",
   partner:     "partner",
+  support: "support",
 };
 
 export const PORTAL_LABEL: Record<Portal, string> = {
   admin:    "Admin Portal",
   consumer: "Consumer Portal",
   partner:  "Partner Portal",
+  support: "/support-dashboard",
 };
 
 export const PORTAL_HOME: Record<Role, string> = {
@@ -45,6 +48,7 @@ export const PORTAL_HOME: Record<Role, string> = {
   admin:       "/dashboard",
   consumer:    "/consumer",
   partner:     "/partner",
+  support: "/support-dashboard",
 };
 
 // ---------------------------------------------------------------------------
@@ -63,7 +67,9 @@ export type Permission =
   | "consumer.payments" | "consumer.consents" | "consumer.notifications" | "consumer.profile"
   // Partner
   | "partner.home" | "partner.assignments" | "partner.visits" | "partner.documentation"
-  | "partner.earnings" | "partner.training" | "partner.availability";
+  | "partner.earnings" | "partner.training" | "partner.availability"
+  // After the last partner permission line, add:
+| "support.queue" | "support.assign" | "support.resolve";
 
 const SUPER_ADMIN_ALL: Permission[] = [
   "overview.view", "ops.view", "system.view",
@@ -94,12 +100,17 @@ const PARTNER_ALL: Permission[] = [
   "partner.home", "partner.assignments", "partner.visits", "partner.documentation",
   "partner.earnings", "partner.training", "partner.availability",
 ];
-
+const SUPPORT_PERMISSIONS: Permission[] = [
+  "support.queue",
+  "support.assign",
+  "support.resolve",
+];
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   super_admin: SUPER_ADMIN_ALL,
   admin:       ADMIN_PERMISSIONS,
   consumer:    CONSUMER_ALL,
   partner:     PARTNER_ALL,
+  support: SUPPORT_PERMISSIONS,
 };
 
 // ---------------------------------------------------------------------------
@@ -108,7 +119,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
 export type NavSection =
   | "Overview" | "Users" | "Clinical" | "Finance" | "Trust & Safety" | "Compliance"
   | "My Care" | "Account"
-  | "Work" | "Personal";
+  | "Work" | "Personal"
+  | "Support";
 
 export interface NavItem {
   to: string;
@@ -165,12 +177,16 @@ export const NAV_REGISTRY: NavItem[] = [
   { to: "/partner/earnings",        label: "Earnings",           icon: IndianRupee,     section: "Personal",       permission: "partner.earnings",          portal: "partner" },
   { to: "/partner/training",        label: "Training",           icon: GraduationCap,   section: "Personal",       permission: "partner.training",          portal: "partner" },
   { to: "/partner/availability",    label: "Availability",       icon: Clock,           section: "Personal",       permission: "partner.availability",      portal: "partner" },
+  // ---------- SUPPORT ----------
+{ to: "/support-dashboard",   label: "Support Queue",    icon: Inbox,        section: "Support", permission: "support.queue",   portal: "support" },
+{ to: "/support-escalations", label: "All Escalations",  icon: AlertOctagon, section: "Support", permission: "support.queue",   portal: "support" },
 ];
 
 export const NAV_SECTIONS: NavSection[] = [
   "Overview", "Users", "Clinical", "Finance", "Trust & Safety", "Compliance",
   "My Care", "Account",
   "Work", "Personal",
+  "Support",
 ];
 
 // ---------------------------------------------------------------------------

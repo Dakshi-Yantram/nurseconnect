@@ -507,7 +507,22 @@ class EscalationCreateRequest(BaseModel):
 class EscalationResolveRequest(BaseModel):
     resolution_notes: str
 
+class EscalationAssignRequest(BaseModel):
+    assigned_to: UUID
 
+class EscalationNoteRequest(BaseModel):
+    note: str = Field(min_length=1)
+
+class EscalationSummaryOut(BaseModel):
+    total: int
+    open: int
+    acknowledged: int
+    investigating: int
+    resolved: int
+    emergency: int
+    contact_doctor: int
+    sla_breached: int
+    unassigned: int
 class EscalationOut(ORMModel):
     id: UUID
     booking_id: UUID
@@ -526,8 +541,12 @@ class EscalationOut(ORMModel):
     acknowledged_at: Optional[datetime] = None
     resolved_at: Optional[datetime] = None
     resolution_notes: Optional[str] = None
+    # Patch 6 — Support dashboard
+    assigned_to: Optional[UUID] = None
+    assigned_at: Optional[datetime] = None
+    internal_notes: Optional[str] = None
+    priority: str = "normal"
     created_at: datetime
-
 
 # ----- CONSENT -----
 class ConsentCreate(BaseModel):

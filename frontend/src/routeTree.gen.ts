@@ -15,6 +15,7 @@ import { Route as AuthLoginRouteImport } from './routes/auth.login'
 import { Route as AppWorkerRouteImport } from './routes/_app.worker'
 import { Route as AppVisitsRouteImport } from './routes/_app.visits'
 import { Route as AppSystemIndexRouteImport } from './routes/_app.system-index'
+import { Route as AppSupportDashboardRouteImport } from './routes/_app.support-dashboard'
 import { Route as AppSubscriptionSubsidyRouteImport } from './routes/_app.subscription-subsidy'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppRetentionDashboardRouteImport } from './routes/_app.retention-dashboard'
@@ -112,6 +113,11 @@ const AppVisitsRoute = AppVisitsRouteImport.update({
 const AppSystemIndexRoute = AppSystemIndexRouteImport.update({
   id: '/system-index',
   path: '/system-index',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSupportDashboardRoute = AppSupportDashboardRouteImport.update({
+  id: '/support-dashboard',
+  path: '/support-dashboard',
   getParentRoute: () => AppRoute,
 } as any)
 const AppSubscriptionSubsidyRoute = AppSubscriptionSubsidyRouteImport.update({
@@ -498,6 +504,7 @@ export interface FileRoutesByFullPath {
   '/retention-dashboard': typeof AppRetentionDashboardRoute
   '/settings': typeof AppSettingsRoute
   '/subscription-subsidy': typeof AppSubscriptionSubsidyRoute
+  '/support-dashboard': typeof AppSupportDashboardRoute
   '/system-index': typeof AppSystemIndexRoute
   '/visits': typeof AppVisitsRouteWithChildren
   '/worker': typeof AppWorkerRouteWithChildren
@@ -572,6 +579,7 @@ export interface FileRoutesByTo {
   '/retention-dashboard': typeof AppRetentionDashboardRoute
   '/settings': typeof AppSettingsRoute
   '/subscription-subsidy': typeof AppSubscriptionSubsidyRoute
+  '/support-dashboard': typeof AppSupportDashboardRoute
   '/system-index': typeof AppSystemIndexRoute
   '/visits': typeof AppVisitsRouteWithChildren
   '/auth/login': typeof AuthLoginRoute
@@ -647,6 +655,7 @@ export interface FileRoutesById {
   '/_app/retention-dashboard': typeof AppRetentionDashboardRoute
   '/_app/settings': typeof AppSettingsRoute
   '/_app/subscription-subsidy': typeof AppSubscriptionSubsidyRoute
+  '/_app/support-dashboard': typeof AppSupportDashboardRoute
   '/_app/system-index': typeof AppSystemIndexRoute
   '/_app/visits': typeof AppVisitsRouteWithChildren
   '/_app/worker': typeof AppWorkerRouteWithChildren
@@ -725,6 +734,7 @@ export interface FileRouteTypes {
     | '/retention-dashboard'
     | '/settings'
     | '/subscription-subsidy'
+    | '/support-dashboard'
     | '/system-index'
     | '/visits'
     | '/worker'
@@ -799,6 +809,7 @@ export interface FileRouteTypes {
     | '/retention-dashboard'
     | '/settings'
     | '/subscription-subsidy'
+    | '/support-dashboard'
     | '/system-index'
     | '/visits'
     | '/auth/login'
@@ -873,6 +884,7 @@ export interface FileRouteTypes {
     | '/_app/retention-dashboard'
     | '/_app/settings'
     | '/_app/subscription-subsidy'
+    | '/_app/support-dashboard'
     | '/_app/system-index'
     | '/_app/visits'
     | '/_app/worker'
@@ -975,6 +987,13 @@ declare module '@tanstack/react-router' {
       path: '/system-index'
       fullPath: '/system-index'
       preLoaderRoute: typeof AppSystemIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/support-dashboard': {
+      id: '/_app/support-dashboard'
+      path: '/support-dashboard'
+      fullPath: '/support-dashboard'
+      preLoaderRoute: typeof AppSupportDashboardRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/subscription-subsidy': {
@@ -1758,6 +1777,7 @@ interface AppRouteChildren {
   AppRetentionDashboardRoute: typeof AppRetentionDashboardRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppSubscriptionSubsidyRoute: typeof AppSubscriptionSubsidyRoute
+  AppSupportDashboardRoute: typeof AppSupportDashboardRoute
   AppSystemIndexRoute: typeof AppSystemIndexRoute
   AppVisitsRoute: typeof AppVisitsRouteWithChildren
   AppWorkerRoute: typeof AppWorkerRouteWithChildren
@@ -1790,6 +1810,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppRetentionDashboardRoute: AppRetentionDashboardRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppSubscriptionSubsidyRoute: AppSubscriptionSubsidyRoute,
+  AppSupportDashboardRoute: AppSupportDashboardRoute,
   AppSystemIndexRoute: AppSystemIndexRoute,
   AppVisitsRoute: AppVisitsRouteWithChildren,
   AppWorkerRoute: AppWorkerRouteWithChildren,

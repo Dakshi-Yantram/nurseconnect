@@ -9,6 +9,7 @@ class UserRole(str, Enum):
     admin_finance = "admin_finance"
     admin_clinical = "admin_clinical"
     admin_super = "admin_super"
+    admin_support = "admin_support"    # ← ADD THIS
     system = "system"
 
 
