@@ -64,7 +64,7 @@ def _ensure_infra_running() -> None:
 async def lifespan(app: FastAPI):
     _ensure_infra_running()
     # Run seed (creates tables + initial config)
-    from app.seed import seed
+    from app.seed import main as seed
     try:
         await seed()
         logger.info("Seed completed")
