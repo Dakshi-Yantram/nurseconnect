@@ -78,6 +78,7 @@ app = FastAPI(
     version="2.0.0",
     description="NurseConnect backend — production-grade healthcare marketplace platform",
     lifespan=lifespan,
+    debug=True,
 )
 
 app.add_middleware(
@@ -87,6 +88,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+import traceback
+
+@app.exception_handler(Exception)
+async def debug_exception_handler(request: Request, exc: Exception):
+    logger.exception("UNHANDLED ERROR on %s %s", request.method, request.url.path)
+    return JSONResponse(status_code=500, content={"detail": str(exc)})
 
 
 @app.middleware("http")
