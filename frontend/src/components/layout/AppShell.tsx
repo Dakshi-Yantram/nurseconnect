@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { Navigate, Outlet, useRouterState } from "@tanstack/react-router";
@@ -39,6 +40,13 @@ export function AppShell() {
   const { user, isAuthenticated, hydrated } = useAuth();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const search = useRouterState({ select: (s) => s.location.searchStr });
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  // Close the mobile drawer any time the route changes (covers back/forward
+  // navigation and any nav path we didn't explicitly wire an onClick for).
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [pathname]);
 
   // SSR: never make routing decisions on the server — always show the
   // loading shell.  The client will re-render immediately after mount
@@ -70,9 +78,9 @@ export function AppShell() {
 
   return (
     <div className="flex min-h-dvh bg-background">
-      <Sidebar />
+      <Sidebar mobileOpen={mobileNavOpen} onCloseMobile={() => setMobileNavOpen(false)} />
       <div className="flex-1 flex flex-col min-w-0">
-        <TopBar />
+        <TopBar onOpenMobileNav={() => setMobileNavOpen(true)} />
         <main className="flex-1 p-3 sm:p-4 lg:p-6 nc-scroll">
           {allowed ? <Outlet /> : <Unauthorized />}
         </main>

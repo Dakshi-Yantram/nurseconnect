@@ -321,7 +321,45 @@ async def admin_list_patients(
         })
     return items
 
+@router.get("/patients/{patient_id}")
+async def admin_get_patient(
+    patient_id: UUID,
+    current: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not is_admin(current.role):
+        raise HTTPException(status_code=403, detail="Admin only")
 
+    stmt = (
+        select(Patient, ConsumerProfile, User)
+        .join(ConsumerProfile, ConsumerProfile.id == Patient.consumer_id)
+        .join(User, User.id == ConsumerProfile.user_id)
+        .where(Patient.id == patient_id)
+    )
+    res = await db.execute(stmt)
+    row = res.first()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    patient, profile, user = row
+    age = None
+    if patient.date_of_birth:
+        today = date.today()
+        age = today.year - patient.date_of_birth.year - (
+            (today.month, today.day) < (patient.date_of_birth.month, patient.date_of_birth.day)
+        )
+
+    return {
+        "id": str(patient.id),
+        "full_name": patient.full_name,
+        "age": age,
+        "gender": patient.gender.value if patient.gender else None,
+        "phone_e164": user.phone_e164,
+        "city": profile.city,
+        "care_plan": None,
+        "is_bpl": False,
+    }
 @router.get("/consumers")
 async def admin_list_consumers(
     current: CurrentUser = Depends(get_current_user),

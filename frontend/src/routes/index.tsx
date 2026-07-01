@@ -22,6 +22,6 @@ function RootRedirect() {
       </div>
     );
   }
-  if (!isAuthenticated || !user) return <Navigate to="/auth/login" />;
+ if (!isAuthenticated || !user) return <Navigate to="/auth/login" search={{ redirect: undefined }} />;
   return <Navigate to={portalHome(user.role)} />;
 }

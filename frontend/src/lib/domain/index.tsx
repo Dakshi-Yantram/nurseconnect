@@ -42,6 +42,8 @@ export interface BookingEntity {
   startedAt: string;
   duration: string;
   rawStatus: string;
+  paymentStatus?: string;
+  totalAmount?: number;
 }
 
 export interface VisitEntity extends BookingEntity { }
@@ -59,6 +61,7 @@ export interface ConsentEntity {
 export interface IncidentEntity {
   id: string;
   patientId?: string;
+  bookingId?: string;
   title: string;
   severity: "low" | "medium" | "high" | "critical";
   rawStatus: string;
@@ -146,6 +149,8 @@ function mapBooking(
     startedAt,
     duration: b.scheduled_duration_minutes ? `${b.scheduled_duration_minutes} mins` : "—",
     rawStatus: b.status ?? "pending",
+    paymentStatus: b.payment_status ?? undefined,
+    totalAmount: b.total_amount ?? undefined,
   };
 }
 
@@ -177,11 +182,37 @@ function mapService(s: any): ServiceEntity {
   };
 }
 
+// ── Map API escalation → IncidentEntity ─────────────────────────────────
+// Real clinical alerts (GET /api/escalations/) — consumer-scoped server-side
+// (joined through Booking.consumer_id), so no client-side ownership filter
+// is needed here. Replaces the old mock CLINICAL_CASES/INCIDENTS data.
+function mapEscalation(e: any): IncidentEntity {
+  const triggerLabel = e.trigger_type ? String(e.trigger_type).replace(/_/g, " ") : "Escalation";
+  const noteSnippet = e.notes ? String(e.notes).slice(0, 60) : "";
+  return {
+    id: e.id ?? "",
+    patientId: e.patient_id ?? undefined,
+    bookingId: e.booking_id ?? undefined,
+    title: noteSnippet ? `${triggerLabel} — ${noteSnippet}` : triggerLabel,
+    severity: (
+      e.level === "emergency" ? "critical"
+      : e.level === "contact_doctor" ? "high"
+      : e.level === "watch" ? "medium"
+      : "low"
+    ) as IncidentEntity["severity"],
+    rawStatus: e.status ?? "open",
+    reporter: e.worker_id ?? "—",
+    assigned: e.assigned_to ?? "Unassigned",
+    createdAt: e.created_at ?? "",
+  };
+}
+
 // ── Build mock fallback data ────────────────────────────────────────────
 // NOTE: bookings are intentionally NOT included in this fallback bundle.
 // Mock visits (Meera Joshi, Mrs. Sharma, etc.) belong to nobody real — if
 // the bookings API fails, the correct behavior is an honest empty state,
 // not someone else's demo data attributed to the logged-in consumer.
+// The same principle now applies to incidents/escalations below.
 function buildMockData() {
   const consents: ConsentEntity[] = CONSENTS.map(c => ({
     id: c.id,
@@ -189,23 +220,6 @@ function buildMockData() {
     patientName: c.patient, type: c.type, version: c.version,
     rawStatus: c.status, signedAt: c.signedAt,
   }));
-
-  const incidents: IncidentEntity[] = [
-    ...CLINICAL_CASES.map(c => ({
-      id: c.id,
-      patientId: resolvePatientIdByName(c.patient),
-      title: `${c.issue} — ${c.patient}`,
-      severity: c.severity as IncidentEntity["severity"],
-      rawStatus: "open", reporter: c.nurse, assigned: "Clinical Desk",
-      createdAt: c.raised,
-    })),
-    ...INCIDENTS.map(i => ({
-      id: i.id, title: i.title,
-      severity: i.severity as IncidentEntity["severity"],
-      rawStatus: i.status, reporter: i.reporter, assigned: i.assigned,
-      createdAt: i.created,
-    })),
-  ];
 
   const packages: PackageEntity[] = [
     { id: "PKG-101", name: "Geriatric Care Plus", rawStatus: "active" },
@@ -222,8 +236,16 @@ function buildMockData() {
     { id: "SVC-105", name: "IV Therapy" },
   ];
 
-  // bookings/visits deliberately empty — see note above.
-  return { bookings: [] as BookingEntity[], visits: [] as VisitEntity[], patients: PATIENTS, consents, incidents, packages, services };
+  // bookings/visits/incidents deliberately empty — see note above.
+  return {
+    bookings: [] as BookingEntity[],
+    visits: [] as VisitEntity[],
+    patients: PATIENTS,
+    consents,
+    incidents: [] as IncidentEntity[],
+    packages,
+    services,
+  };
 }
 
 function BookingSyncer({ bookings, userId }: { bookings: BookingEntity[]; userId: string | null }) {
@@ -267,11 +289,12 @@ export function DomainProvider({ children }: { children: ReactNode }) {
       const mock = buildMockData();
 
       // Fetch all data in parallel
-      const [bookingsRes, patientsRes, servicesRes, packagesRes] = await Promise.allSettled([
+      const [bookingsRes, patientsRes, servicesRes, packagesRes, escalationsRes] = await Promise.allSettled([
         apiFetch("/api/bookings/consumer"),
         apiFetch("/api/patients"),
         apiFetch("/api/services"),
         apiFetch("/api/care-packages"),
+        apiFetch("/api/escalations/"),
       ]);
       console.log("patients:", patientsRes);
       console.log("services:", servicesRes);
@@ -312,6 +335,17 @@ export function DomainProvider({ children }: { children: ReactNode }) {
         console.warn("Bookings API failed — showing empty state instead of mock data:", bookingsRes.reason);
       }
 
+      // Map escalations → real clinical alerts. Same honesty principle as
+      // bookings: on failure, show an empty state rather than mock incidents.
+      const incidents: IncidentEntity[] =
+        escalationsRes.status === "fulfilled"
+          ? (Array.isArray(escalationsRes.value) ? escalationsRes.value : []).map(mapEscalation)
+          : [];
+
+      if (escalationsRes.status !== "fulfilled") {
+        console.warn("Escalations API failed — showing no alerts instead of mock data:", escalationsRes.reason);
+      }
+
       // Map patients
       const patients: Patient[] =
         patientsRes.status === "fulfilled"
@@ -348,15 +382,15 @@ export function DomainProvider({ children }: { children: ReactNode }) {
         visits: bookings,
         patients,
         consents: mock.consents,
-        incidents: mock.incidents,
+        incidents,
         packages,
         services,
       });
     } catch (e) {
       console.warn("Domain API load failed:", e);
-      // Even on a hard failure, keep bookings/visits empty rather than
-      // silently swapping in demo data for a real, logged-in user.
-      setData(prev => ({ ...prev, bookings: [], visits: [] }));
+      // Even on a hard failure, keep bookings/visits/incidents empty rather
+      // than silently swapping in demo data for a real, logged-in user.
+      setData(prev => ({ ...prev, bookings: [], visits: [], incidents: [] }));
     } finally {
       setLoading(false);
     }

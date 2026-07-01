@@ -14,7 +14,7 @@ export const Route = createFileRoute("/_app/consumer/notifications")({
 });
 
 function ConsumerNotifications() {
-  const incidents = useIncidents().slice(0, 4);
+  const allIncidents = useIncidents();
   const bookings = useBookings();
 
   const bookingPriority: Record<string, number> = {
@@ -37,7 +37,7 @@ function ConsumerNotifications() {
     return map;
   }, [bookings]);
 
-  const resolveBookingIdForIncident = (incident: (typeof incidents)[number]) => {
+  const resolveBookingIdForIncident = (incident: ReturnType<typeof useIncidents>[number]) => {
     if ((incident as any).bookingId) return String((incident as any).bookingId);
 
     if (incident.patientId) {
@@ -58,10 +58,18 @@ function ConsumerNotifications() {
     )?.id;
   };
 
+  // Only show alerts that actually link somewhere — avoids rendering
+  // dead-end rows for demo/seed incidents unrelated to this consumer.
+  const incidents = useMemo(() => {
+    return allIncidents
+      .map((i) => ({ incident: i, bookingId: resolveBookingIdForIncident(i) }))
+      .filter((x) => x.bookingId)
+      .slice(0, 4);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allIncidents, bookings]);
+
   return (
     <div className="space-y-6">
-
-      {/* Care alerts */}
       <Card
         title={<span className="flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-rose-600" /> Care alerts</span>}
         padded={false}
@@ -71,47 +79,30 @@ function ConsumerNotifications() {
             <EmptyState icon={Bell} title="No active alerts" description="Clinical alerts for your patients will appear here." />
           </div>
         ) : (
-          incidents.map(i => {
-            const bookingId = resolveBookingIdForIncident(i);
-            const row = (
-              <>
-                <div className="min-w-0 flex-1">
-                  <div className="text-[13px] font-medium truncate">{i.title}</div>
-                  <div className="text-[11.5px] text-muted-foreground truncate">
-                    {i.id} · reporter {i.reporter}
-                  </div>
+          incidents.map(({ incident: i, bookingId }) => (
+            <Link
+              key={i.id}
+              to="/consumer/bookings/$bookingId"
+              params={{ bookingId: bookingId! }}
+              className="flex items-center gap-3 px-4 py-3 border-b border-border last:border-0 hover:bg-muted/30"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="text-[13px] font-medium truncate">{i.title}</div>
+                <div className="text-[11.5px] text-muted-foreground truncate">
+                  {i.id} · reporter {i.reporter}
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <SeverityBadge severity={i.severity} />
-                  <StatusBadge workflow="incident" state={bindStatus("incident", i.rawStatus)} />
-                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                </div>
-              </>
-            );
-
-            return bookingId ? (
-              <Link
-                key={i.id}
-                to="/consumer/bookings/$bookingId"
-                params={{ bookingId }}
-                className="flex items-center gap-3 px-4 py-3 border-b border-border last:border-0 hover:bg-muted/30"
-              >
-                {row}
-              </Link>
-            ) : (
-              <div
-                key={i.id}
-                className="flex items-center gap-3 px-4 py-3 border-b border-border last:border-0 opacity-70"
-                title="No linked booking found for this alert"
-              >
-                {row}
               </div>
-            );
-          })
+              <div className="flex items-center gap-2 shrink-0">
+                <SeverityBadge severity={i.severity} />
+                <StatusBadge workflow="incident" state={bindStatus("incident", i.rawStatus)} />
+                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+              </div>
+            </Link>
+          ))
         )}
       </Card>
 
-      {/* Booking updates */}
+      {/* Booking updates section unchanged */}
       <Card
         title={<span className="flex items-center gap-2"><CalendarCheck className="h-4 w-4 text-primary" /> Booking updates</span>}
         padded={false}
@@ -144,7 +135,6 @@ function ConsumerNotifications() {
           ))
         )}
       </Card>
-
     </div>
   );
 }

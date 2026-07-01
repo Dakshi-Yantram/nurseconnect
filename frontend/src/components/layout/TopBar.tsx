@@ -12,7 +12,7 @@
 // route is added to rbac.ts, just extend NOTIFICATIONS_ROUTE_BY_PORTAL below.
 
 import { useNavigate, useRouterState } from "@tanstack/react-router";
-import { Bell, Search, ChevronDown } from "lucide-react";
+import { Bell, Search, ChevronDown, Menu } from "lucide-react";
 import { useState } from "react";
 import { Breadcrumbs } from "./Breadcrumbs";
 import { useAuth } from "@/lib/auth-context";
@@ -26,7 +26,12 @@ const NOTIFICATIONS_ROUTE_BY_PORTAL: Partial<Record<Portal, string>> = {
    partner: "/partner/notifications", 
 };
 
-export function TopBar() {
+type TopBarProps = {
+  /** Opens the mobile sidebar drawer. Hamburger button only shows below lg. */
+  onOpenMobileNav?: () => void;
+};
+
+export function TopBar({ onOpenMobileNav }: TopBarProps) {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const meta = routeMeta(path);
   const { user, setRole } = useAuth();
@@ -38,9 +43,19 @@ export function TopBar() {
   return (
     <header className="sticky top-0 z-20 bg-card/95 backdrop-blur border-b border-border">
       <div className="flex items-center justify-between px-3 sm:px-4 lg:px-6 py-2.5 sm:py-3 gap-3 sm:gap-4">
-        <div className="min-w-0">
-          <Breadcrumbs />
-          <h1 className="text-[15px] sm:text-[18px] font-semibold text-foreground leading-tight truncate">{meta.title}</h1>
+        <div className="flex items-center gap-2 min-w-0">
+          <button
+            type="button"
+            aria-label="Open menu"
+            onClick={onOpenMobileNav}
+            className="lg:hidden h-9 w-9 grid place-items-center rounded-md hover:bg-secondary shrink-0"
+          >
+            <Menu className="h-5 w-5 text-muted-foreground" />
+          </button>
+          <div className="min-w-0">
+            <Breadcrumbs />
+            <h1 className="text-[15px] sm:text-[18px] font-semibold text-foreground leading-tight truncate">{meta.title}</h1>
+          </div>
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">

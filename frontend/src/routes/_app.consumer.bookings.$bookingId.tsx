@@ -1,10 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useState, useEffect } from "react";
+import { toast } from "sonner";
 import {
   ArrowLeft, HeartPulse, MapPin, Clock, IndianRupee,
-  CheckCircle2, AlertCircle, XCircle, Ban,
+  CheckCircle2, AlertCircle, XCircle, Ban, Loader2,
   ClipboardList, Thermometer, Activity, FileText, ArrowRight,
 } from "lucide-react";
-import { useBooking } from "@/lib/domain";
+import { useBooking, useRefetchBookings } from "@/lib/domain";
 import { Card } from "@/components/shared/Card";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { SLAIndicator } from "@/components/shared/SLAIndicator";
@@ -12,6 +14,9 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { RuntimeBoundary } from "@/components/shared/RuntimeBoundary";
 import { useEntity, useEntityHistory } from "@/lib/orchestration";
 import { bindStatus, parseEnteredAt } from "@/lib/workflow-bind";
+import { useAuth } from "@/lib/auth-context";
+import { apiFetch } from "@/lib/api";
+import { payForBooking } from "@/lib/payments";
 import {
   bookingService, bookingPatientName, bookingArea,
   bookingStartedAt, bookingDuration, bookingNurseName,
@@ -35,6 +40,26 @@ function derivePaymentStatus(bookingState: string): PaymentStatus {
     case "escalated": return "failed";
     default: return "pending";
   }
+}
+
+/** Maps the real backend payment_status (BookingOut.payment_status) to the
+ *  display categories this page already knows how to render. Only falls
+ *  back to state-derived heuristics when the backend hasn't told us yet
+ *  (e.g. still hydrating, or a demo/seed record with no payment row). */
+function mapRealPaymentStatus(raw: string | undefined): PaymentStatus | null {
+  switch (raw) {
+    case "captured": return "paid";
+    case "initiated": return "processing";
+    case "pending": return "pending";
+    case "failed": return "failed";
+    case "refunded": case "partially_refunded": return "refunded";
+    default: return null;
+  }
+}
+
+/** Whether a "Pay now" action should be offered for this payment status. */
+function isPayable(raw: string | undefined): boolean {
+  return raw === "pending" || raw === "failed" || raw === "initiated";
 }
 
 function deriveAmount(service: string | undefined): number {
@@ -61,12 +86,76 @@ const PAYMENT_CONFIG: Record<PaymentStatus, {
 }> = {
   paid: { label: "Paid", icon: CheckCircle2, classes: "text-emerald-700 bg-emerald-50 border-emerald-200", description: "Payment settled — visit completed successfully." },
   processing: { label: "Processing", icon: Clock, classes: "text-blue-700 bg-blue-50 border-blue-200", description: "Visit is in progress — payment will settle on completion." },
-  pending: { label: "Pending", icon: Clock, classes: "text-amber-700 bg-amber-50 border-amber-200", description: "Booking confirmed — payment due on visit completion." },
+  pending: { label: "Pending", icon: Clock, classes: "text-amber-700 bg-amber-50 border-amber-200", description: "Booking confirmed — pay now, or it will be collected automatically on visit completion." },
   refunded: { label: "Refunded", icon: XCircle, classes: "text-muted-foreground bg-muted border-border", description: "Booking cancelled — refund credited within 5–7 working days." },
   failed: { label: "Action needed", icon: AlertCircle, classes: "text-rose-700 bg-rose-50 border-rose-200", description: "Payment issue detected — your care team has been notified." },
 };
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// ─── Visit report (real backend data) ─────────────────────────────────────
+// Replaces what used to be entirely hardcoded "sample" content in the Care
+// Summary card below — this is the actual "view the report" flow that was
+// missing: GET /api/visits/{booking_id} for checklist/documentation/notes,
+// plus GET /api/visits/{booking_id}/vitals for the latest recorded vitals.
+
+interface VisitReport {
+  checklistResponses: Record<string, any> | null;
+  documentationResponses: Record<string, any> | null;
+  familySummary: string | null;
+  careNotes: string | null;
+  ratingByConsumer: number | null;
+  vitals: {
+    bp: string | null;
+    pulse: number | null;
+    spo2: number | null;
+    temperatureF: number | null;
+  } | null;
+}
+
+function useVisitReport(bookingId: string, enabled: boolean) {
+  const [data, setData] = useState<VisitReport | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [notFound, setNotFound] = useState(false);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    setLoading(true);
+    setNotFound(false);
+    Promise.allSettled([
+      apiFetch(`/api/visits/${bookingId}`),
+      apiFetch(`/api/visits/${bookingId}/vitals`),
+    ]).then(([visitRes, vitalsRes]) => {
+      if (cancelled) return;
+      if (visitRes.status === "fulfilled") {
+        const v = visitRes.value;
+        const vitalsList = vitalsRes.status === "fulfilled" && Array.isArray(vitalsRes.value) ? vitalsRes.value : [];
+        const latest = vitalsList[0] ?? null;
+        setData({
+          checklistResponses: v.checklist_responses ?? null,
+          documentationResponses: v.documentation_responses ?? null,
+          familySummary: v.family_summary ?? null,
+          careNotes: v.care_notes ?? null,
+          ratingByConsumer: v.rating_by_consumer ?? null,
+          vitals: latest ? {
+            bp: latest.bp_systolic != null && latest.bp_diastolic != null
+              ? `${latest.bp_systolic} / ${latest.bp_diastolic} mmHg` : null,
+            pulse: latest.pulse ?? null,
+            spo2: latest.spo2 ?? null,
+            temperatureF: latest.temperature_f ?? null,
+          } : null,
+        });
+      } else {
+        setNotFound(true);
+      }
+      setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [bookingId, enabled]);
+
+  return { data, loading, notFound };
+}
+
+
 const TIMELINE_LABELS: Record<string, string> = {
   "entity.created": "Booking created",
   "workflow.transitioned": "Status updated",
@@ -81,9 +170,12 @@ const TIMELINE_LABELS: Record<string, string> = {
 
 function ConsumerBookingDetail() {
   const { bookingId } = Route.useParams();
+  const { user } = useAuth();
 
   const domainBooking = useBooking(bookingId);
+  const refetchBookings = useRefetchBookings();
   const history = useEntityHistory("booking", bookingId);
+  const [paying, setPaying] = useState(false);
 
   const record = domainBooking ? {
     id: domainBooking.id,
@@ -114,10 +206,38 @@ function ConsumerBookingDetail() {
   const duration = domainBooking?.duration ?? "—";
   const nurse = domainBooking?.nurseName ?? "Unassigned";
 
-  const payStatus = derivePaymentStatus(record.state);
-  const amount = deriveAmount(service);
+  const rawPaymentStatus = domainBooking?.paymentStatus;
+  const payStatus = mapRealPaymentStatus(rawPaymentStatus) ?? derivePaymentStatus(record.state);
+  const amount = domainBooking?.totalAmount ?? deriveAmount(service);
   const payCfg = PAYMENT_CONFIG[payStatus];
   const PayIcon = payCfg.icon;
+  const canPay = isPayable(rawPaymentStatus);
+
+  const { data: report, loading: reportLoading, notFound: reportNotFound } =
+    useVisitReport(record.id, record.state === "completed");
+
+  const handlePay = async () => {
+    setPaying(true);
+    try {
+      const result = await payForBooking({
+        bookingId: record.id,
+        description: `${service} — ${patientName}`,
+        prefillEmail: user?.email,
+      });
+      if (result.verified) {
+        toast.success("Payment successful!");
+        await refetchBookings();
+      } else {
+        toast.error("We couldn't confirm the payment. Please try again.");
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Payment failed";
+      if (msg !== "Payment cancelled") toast.error(msg);
+    } finally {
+      setPaying(false);
+    }
+  };
+
   return (
     <div className="space-y-5">
       <BackLink />
@@ -186,22 +306,39 @@ function ConsumerBookingDetail() {
                   Refund of {formatINR(amount)} will be credited to your original payment method within 5–7 working days.
                 </div>
               )}
-              {payStatus === "pending" && (
-                <div className="mt-3 text-[11.5px] opacity-75">
-                  Payment of {formatINR(amount)} will be collected automatically on visit completion. No action needed now.
-                </div>
-              )}
               {payStatus === "processing" && (
                 <div className="mt-3 text-[11.5px] opacity-75">
                   Your visit is underway. Payment will be confirmed once the nurse completes the visit.
+                </div>
+              )}
+
+              {canPay && (
+                <div className="mt-3 pt-3 border-t border-current/10">
+                  <button
+                    onClick={handlePay}
+                    disabled={paying}
+                    className="inline-flex items-center gap-2 rounded-md bg-primary text-primary-foreground px-4 py-2 text-[13px] font-medium hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {paying ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Processing…
+                      </>
+                    ) : (
+                      <>Pay {formatINR(amount)} now</>
+                    )}
+                  </button>
+                  {payStatus === "failed" && (
+                    <div className="mt-2 text-[11.5px] opacity-75">
+                      Your last payment attempt didn't go through — try again above.
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           </div>
         </Card>
       </RuntimeBoundary>
-      {/* ── Care Summary (only when completed) ── */}
-      {/*  {(record.state === "completed" || record.state === "in_progress") && ( */}
+      {/* ── Care Summary / Report (only when completed) ── */}
       {record.state === "completed" && (
         <RuntimeBoundary label="Care summary">
           <Card title={
@@ -209,68 +346,90 @@ function ConsumerBookingDetail() {
               <ClipboardList className="h-4 w-4 text-muted-foreground" /> Care summary
             </span>
           }>
-            {/* Visit stats */}
-            <div className="grid grid-cols-3 gap-3 mb-4">
-              <div className="bg-muted/50 rounded-lg px-3 py-2.5">
-                <div className="text-[10.5px] text-muted-foreground uppercase tracking-wide">Duration</div>
-                <div className="text-[13px] font-semibold mt-0.5">{duration}</div>
+            {reportLoading && (
+              <div className="flex items-center gap-2 text-[12.5px] text-muted-foreground py-6 justify-center">
+                <Loader2 className="h-4 w-4 animate-spin" /> Loading your visit report…
               </div>
-              <div className="bg-muted/50 rounded-lg px-3 py-2.5">
-                <div className="text-[10.5px] text-muted-foreground uppercase tracking-wide">Completed at</div>
-                <div className="text-[13px] font-semibold mt-0.5">{started}</div>
-              </div>
-              <div className="bg-muted/50 rounded-lg px-3 py-2.5">
-                <div className="text-[10.5px] text-muted-foreground uppercase tracking-wide">Nurse</div>
-                <div className="text-[13px] font-semibold mt-0.5">{nurse}</div>
-              </div>
-            </div>
+            )}
 
-            {/* Tasks completed */}
-            <div className="mb-4">
-              <div className="text-[11.5px] text-muted-foreground font-medium mb-2">Tasks completed</div>
-              <div className="flex flex-wrap gap-2">
-                {["Vital signs recorded", "Medication administered", "Mobility assessment", "Hygiene assistance"].map(task => (
-                  <span key={task} className="inline-flex items-center gap-1 text-[12px] px-2.5 py-1 rounded-full border border-border bg-muted/40 text-muted-foreground">
-                    <CheckCircle2 className="h-3 w-3 text-emerald-600" /> {task}
-                  </span>
-                ))}
-              </div>
-            </div>
+            {!reportLoading && reportNotFound && (
+              <EmptyState
+                icon={FileText}
+                title="Report not available yet"
+                description="Your care team hasn't finished documenting this visit. Check back shortly."
+              />
+            )}
 
-            {/* Vitals */}
-            <div className="mb-4">
-              <div className="text-[11.5px] text-muted-foreground font-medium mb-2">Vitals recorded</div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {[
-                  { label: "Blood pressure", value: "128 / 82 mmHg" },
-                  { label: "SpO₂", value: "97%" },
-                  { label: "Heart rate", value: "74 bpm" },
-                  { label: "Temperature", value: "98.4 °F" },
-                ].map(v => (
-                  <div key={v.label} className="bg-muted/50 rounded-lg px-3 py-2.5">
-                    <div className="text-[10.5px] text-muted-foreground uppercase tracking-wide">{v.label}</div>
-                    <div className="text-[13px] font-semibold mt-0.5">{v.value}</div>
+            {!reportLoading && !reportNotFound && report && (
+              <>
+                {/* Visit stats */}
+                <div className="grid grid-cols-3 gap-3 mb-4">
+                  <div className="bg-muted/50 rounded-lg px-3 py-2.5">
+                    <div className="text-[10.5px] text-muted-foreground uppercase tracking-wide">Duration</div>
+                    <div className="text-[13px] font-semibold mt-0.5">{duration}</div>
                   </div>
-                ))}
-              </div>
-            </div>
+                  <div className="bg-muted/50 rounded-lg px-3 py-2.5">
+                    <div className="text-[10.5px] text-muted-foreground uppercase tracking-wide">Completed at</div>
+                    <div className="text-[13px] font-semibold mt-0.5">{started}</div>
+                  </div>
+                  <div className="bg-muted/50 rounded-lg px-3 py-2.5">
+                    <div className="text-[10.5px] text-muted-foreground uppercase tracking-wide">Nurse</div>
+                    <div className="text-[13px] font-semibold mt-0.5">{nurse}</div>
+                  </div>
+                </div>
 
-            {/* Nurse notes */}
-            <div className="mb-4">
-              <div className="text-[11.5px] text-muted-foreground font-medium mb-2">Nurse's notes</div>
-              <div className="bg-muted/40 rounded-lg px-3 py-2.5 text-[12.5px] text-muted-foreground leading-relaxed">
-                {(record.data as any)?.notes ?? "Patient was calm and cooperative. No adverse events during the visit."}
-              </div>
-            </div>
+                {/* Tasks completed */}
+                <div className="mb-4">
+                  <div className="text-[11.5px] text-muted-foreground font-medium mb-2">Tasks completed</div>
+                  <div className="flex flex-wrap gap-2">
+                    {report.vitals && (
+                      <TaskBadge label="Vital signs recorded" />
+                    )}
+                    {report.checklistResponses && (
+                      <TaskBadge label="Clinical checklist completed" />
+                    )}
+                    {report.documentationResponses && (
+                      <TaskBadge label="Visit documentation submitted" />
+                    )}
+                    {!report.vitals && !report.checklistResponses && !report.documentationResponses && (
+                      <span className="text-[12.5px] text-muted-foreground">No tasks recorded for this visit yet.</span>
+                    )}
+                  </div>
+                </div>
 
-            {/* Next steps */}
-            <div>
-              <div className="text-[11.5px] text-muted-foreground font-medium mb-2">Next steps</div>
-              <div className="flex items-start gap-2 text-[12.5px] text-muted-foreground">
-                <ArrowRight className="h-3.5 w-3.5 mt-0.5 text-blue-500 shrink-0" />
-                <span>{(record.data as any)?.nextSteps ?? "No follow-up required. Continue current care plan."}</span>
-              </div>
-            </div>
+                {/* Vitals */}
+                <div className="mb-4">
+                  <div className="text-[11.5px] text-muted-foreground font-medium mb-2">Vitals recorded</div>
+                  {report.vitals ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <VitalStat label="Blood pressure" value={report.vitals.bp} />
+                      <VitalStat label="SpO₂" value={report.vitals.spo2 != null ? `${report.vitals.spo2}%` : null} />
+                      <VitalStat label="Heart rate" value={report.vitals.pulse != null ? `${report.vitals.pulse} bpm` : null} />
+                      <VitalStat label="Temperature" value={report.vitals.temperatureF != null ? `${report.vitals.temperatureF} °F` : null} />
+                    </div>
+                  ) : (
+                    <div className="text-[12.5px] text-muted-foreground">No vitals were recorded during this visit.</div>
+                  )}
+                </div>
+
+                {/* Nurse notes */}
+                <div className="mb-4">
+                  <div className="text-[11.5px] text-muted-foreground font-medium mb-2">Nurse's notes</div>
+                  <div className="bg-muted/40 rounded-lg px-3 py-2.5 text-[12.5px] text-muted-foreground leading-relaxed">
+                    {report.careNotes || "No notes were recorded for this visit."}
+                  </div>
+                </div>
+
+                {/* Next steps */}
+                <div>
+                  <div className="text-[11.5px] text-muted-foreground font-medium mb-2">Next steps</div>
+                  <div className="flex items-start gap-2 text-[12.5px] text-muted-foreground">
+                    <ArrowRight className="h-3.5 w-3.5 mt-0.5 text-blue-500 shrink-0" />
+                    <span>{report.familySummary || "No follow-up notes yet. Continue current care plan."}</span>
+                  </div>
+                </div>
+              </>
+            )}
           </Card>
         </RuntimeBoundary>
       )}
@@ -315,6 +474,23 @@ function BackLink() {
     >
       <ArrowLeft className="h-3.5 w-3.5" /> Back to bookings
     </Link>
+  );
+}
+
+function TaskBadge({ label }: { label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 text-[12px] px-2.5 py-1 rounded-full border border-border bg-muted/40 text-muted-foreground">
+      <CheckCircle2 className="h-3 w-3 text-emerald-600" /> {label}
+    </span>
+  );
+}
+
+function VitalStat({ label, value }: { label: string; value: string | null }) {
+  return (
+    <div className="bg-muted/50 rounded-lg px-3 py-2.5">
+      <div className="text-[10.5px] text-muted-foreground uppercase tracking-wide">{label}</div>
+      <div className="text-[13px] font-semibold mt-0.5">{value ?? "—"}</div>
+    </div>
   );
 }
 
